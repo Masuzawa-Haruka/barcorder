@@ -82,8 +82,9 @@ export default function Home() {
       console.error("商品検索処理中にエラーが発生しました:", error);
       // ユーザー向けの分かりやすいメッセージ
       alert("商品検索中にエラーが発生しました。通信環境を確認のうえ、時間をおいて再度お試しください。");
-    } 
-    finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,9 +239,9 @@ export default function Home() {
                 <div className="mb-6">
                   <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
                   <div className="grid grid-cols-4 gap-2 mb-3">
+                    <button onClick={() => setExpiryDate(getFutureDate(1))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">明日</button>
                     <button onClick={() => setExpiryDate(getFutureDate(3))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
                     <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(14))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">2週間</button>
                     <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
                   </div>
                   <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
@@ -354,7 +355,11 @@ export default function Home() {
                 </div>
               );
             })}
-            {displayItems.length === 0 && <div className="text-center py-10 text-gray-400">表示する在庫がありません</div>}
+            {displayItems.length === 0 && (
+              <div className="text-center py-10 text-gray-400">
+                {inventorySearch ? "検索条件に一致する在庫がありません" : "表示する在庫がありません"}
+              </div>
+            )}
           </div>
         </div>
       )}
