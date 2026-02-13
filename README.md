@@ -1,9 +1,45 @@
-# stuplus_app
-echo "# stuplus_app" >> README.md
-git init
-git add README.md
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/Masuzawa-Haruka/stuplus_app.git
-git push -u origin main
-今これを打った状態1/27
+プロジェクト設計書：Barcoder（仮）
+
+1. プロジェクト概要アプリ名: Barcoder（バーコーダー）コンセプト: 家にあるモノの「寿命」を管理する、バーコードスキャン特化型在庫管理アプリ。
+
+ 解決する課題:
+    ・冷蔵庫の奥で調味料が期限切れになる（食品ロス）。
+ 　　・防災グッズや電池の期限管理が面倒。「あれ、まだあったっけ？」による重複購入。
+ 
+ 2. コア体験（ユーザーフロー）JANコードには賞味期限情報が含まれないため、以下のフローで「入力の手間」を極限まで減らします。
+ 
+    ・スキャン: アプリで商品のバーコードを読み取る。自動取得: 商品名・商品画像が自動でセットされる。
+    ・期限設定: 「+3日」「+1週間」「+半年」などのクイックボタンで期限を決定（またはカレンダー入力）。
+    ・通知: 期限が迫るとプッシュ通知が届く。
+    
+3. 機能要件（MVP: 最初に作る機能）
+
+    ##notion link
+    (https://www.notion.so/BarCorder-300b3fc609c580f8beebee78f2fd1ef6) 
+
+
+4. 技術スタック（開発ツール）個人開発・スマホアプリとして最適な構成を選定しましたカメラ制御やUI構築が強力。
+バックエンドSupabase認証・DB・画像保存がこれ1つで完結。FirebaseよりRDB(PostgreSQL)が扱いやすい。商品データAPIYahoo!ショッピングAPI日本のJANコード検索に強い（無料枠あり）。楽天APIも候補。デザインMaterial Design 3Flutter標準のデザインシステム。見やすく作りやすい。
+
+5. データベース設計（スキーマ案）Supabase（PostgreSQL）に作成するテーブルのイメージです。
+　　
+　　・items テーブル（在庫データ）カラム名型説明iduuid一意のIDuser_iduuid誰のアイテムか（認証ID）barcodestringJANコード（例: 4901234567890）namestring商品名（例: カップヌードル）image_urlstring商品画像のURLexpiry_datedate賞味期限/使用期限statusstringactive(在庫あり), consumed(完食), discarded(廃棄)created_attimestamp登録日
+
+6. 画面設計（ワイヤーフレームイメージ）必要な画面は大きく分けて3つだけです。
+
+    ホーム画面（在庫リスト）期限が近いものが赤字で上に表示される。右下に大きな「＋」ボタン（スキャン起動）。スキャン＆登録画面カメラビュー。読み取り後、下からハーフモーダルで「商品情報」と「期限ボタン」が出る。設定画面通知のタイミング設定（例：3日前、当日）。
+    
+7. 開発ロードマップここから一緒に進めていく手順です。
+    環境構築: FlutterとSupabaseのプロジェクト作成。
+        
+        Step 1（スキャン）: カメラでバーコードを読み取って、数字（JANコード）を表示させる。
+        
+        Step 2（API連携）: 読み取った番号でYahoo! APIを叩き、商品名を表示させる。
+        
+        Step 3（DB保存）: 読み取ったデータをSupabaseに保存し、リストに表示する。
+        
+        Step 4（通知）: 期限が来たらスマホを鳴らす。リリース: ストアに公開！
+
+
+
+検索で何を表示させるかが難しかった
