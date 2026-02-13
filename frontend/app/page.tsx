@@ -77,7 +77,12 @@ export default function Home() {
       if (uniqueItems.length === 0) alert("商品が見つかりませんでした");
       else setCandidates(uniqueItems);
 
-    } catch (error) { console.error(error); alert("検索エラー"); } 
+    } catch (error) {
+      // 開発者向けの詳細ログ
+      console.error("商品検索処理中にエラーが発生しました:", error);
+      // ユーザー向けの分かりやすいメッセージ
+      alert("商品検索中にエラーが発生しました。通信環境を確認のうえ、時間をおいて再度お試しください。");
+    } 
     finally { setLoading(false); }
   };
 
@@ -89,7 +94,7 @@ export default function Home() {
       const html5QrCode = new Html5Qrcode("reader-hidden");
       const result = await html5QrCode.scanFileV2(file, true);
       if (result && result.decodedText) searchProduct(result.decodedText);
-      else alert("バーコード検出失敗");
+      else alert("バーコードを検出できませんでした");
     } catch (err) { alert("読み取り失敗"); }
     finally { setLoading(false); e.target.value = ""; }
   };
@@ -110,7 +115,10 @@ export default function Home() {
       }),
     });
     alert(`「${selectedProduct.name}」を追加しました！`);
-    setCandidates([]); setSelectedProduct(null); setInputCode(""); refreshData();
+    setCandidates([]);
+    setSelectedProduct(null);
+    setInputCode("");
+    refreshData();
   };
 
   const updateStatus = async (id: string, newStatus: string) => {
@@ -237,7 +245,13 @@ export default function Home() {
                   </div>
                   <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
                     <span className="text-xl">📅</span>
-                    <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="bg-transparent flex-1 outline-none text-gray-700 font-bold" />
+                    <input
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                      aria-label="賞味期限を選択"
+                      className="bg-transparent flex-1 outline-none text-gray-700 font-bold"
+                    />
                   </div>
                 </div>
 
@@ -257,7 +271,7 @@ export default function Home() {
             {/* 検索バー */}
             <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="キーワード検索..." className="w-full p-3 border rounded-xl shadow-sm" />
             
-            {/* ★ 修正：フィルタを右寄せにするため、親要素に flex-col items-end を追加し、ここは w-auto のまま ★ */}
+            {/* フィルタプルダウンを右端に配置するため、親要素に flex-col items-end を指定し、ここは w-auto のままにしている */}
             <select 
               value={filterOption} 
               onChange={(e) => setFilterOption(e.target.value as 'all' | 'safe' | 'expired')}
@@ -271,7 +285,10 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-              const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0,0,0,0));
+              const expiryDate = new Date(item.expiry_date);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const isExpired = expiryDate < today;
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
 
@@ -288,6 +305,7 @@ export default function Home() {
                           type="date" 
                           value={item.expiry_date} 
                           onChange={(e) => updateExpiryDate(item.id, e.target.value)}
+                          aria-label={`${item.name}の賞味期限を編集`}
                           className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
                         />
                         {isExpired && <span className="text-xs bg-red-500 text-white px-1 py-0.5 rounded ml-1 font-bold">期限切れ</span>}
@@ -295,9 +313,43 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-black/5">
-                    <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
-                    <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
-                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500">🗑️</button>
+                    {item.status === 'active' ? (
+                      <>
+                        <button
+                          onClick={() => updateStatus(item.id, 'consumed')}
+                          className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold"
+                        >
+                          😋 完食
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'discarded')}
+                          className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold"
+                        >
+                          😱 廃棄
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'delete')}
+                          className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => updateStatus(item.id, 'active')}
+                          className="flex-1 bg-blue-100 text-blue-800 hover:bg-blue-200 py-2 rounded-lg font-bold"
+                        >
+                          ↩️ 元に戻す
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'delete')}
+                          className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
