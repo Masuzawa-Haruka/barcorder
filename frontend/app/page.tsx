@@ -15,7 +15,6 @@ export default function Home() {
 
   const [filterOption, setFilterOption] = useState<'all' | 'safe' | 'expired'>('all');
 
-  // 候補リスト
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
 
@@ -47,7 +46,6 @@ export default function Home() {
     }
   }, [selectedProduct]);
 
-  // --- 検索・登録ロジック ---
   const searchProduct = async (codeOverride?: string) => {
     const targetCode = typeof codeOverride === 'string' ? codeOverride : inputCode;
     if (!targetCode) return;
@@ -77,19 +75,12 @@ export default function Home() {
       if (uniqueItems.length === 0) alert("商品が見つかりませんでした");
       else setCandidates(uniqueItems);
 
-<<<<<<< HEAD
-    } catch (error) { console.error(error); alert("検索エラー"); }
-    finally { setLoading(false); }
-=======
     } catch (error) {
-      // 開発者向けの詳細ログ
-      console.error("商品検索処理中にエラーが発生しました:", error);
-      // ユーザー向けの分かりやすいメッセージ
-      alert("商品検索中にエラーが発生しました。通信環境を確認のうえ、時間をおいて再度お試しください。");
+      console.error(error);
+      alert("検索エラーが発生しました");
     } finally {
       setLoading(false);
     }
->>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,7 +104,7 @@ export default function Home() {
   const registerItem = async () => {
     if (!selectedProduct) return;
     const finalDate = expiryDate || getFutureDate(7);
-<<<<<<< HEAD
+
     try {
       const res = await fetch("http://localhost:3001/api/items", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -122,44 +113,38 @@ export default function Home() {
           image: selectedProduct.image, expiry_date: finalDate
         }),
       });
+
       if (!res.ok) {
         alert("登録に失敗しました。もう一度お試しください。");
         return;
       }
+
       alert(`「${selectedProduct.name}」を追加しました！`);
-      setCandidates([]); setSelectedProduct(null); setInputCode(""); refreshData();
+      setCandidates([]);
+      setSelectedProduct(null);
+      setInputCode("");
+      refreshData();
     } catch (error) {
       console.error(error);
       alert("ネットワークエラーが発生しました。");
     }
-=======
-    await fetch("http://localhost:3001/api/items", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
-        image: selectedProduct.image, expiry_date: finalDate
-      }),
-    });
-    alert(`「${selectedProduct.name}」を追加しました！`);
-    setCandidates([]);
-    setSelectedProduct(null);
-    setInputCode("");
-    refreshData();
->>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
   };
 
   const updateStatus = async (id: string, newStatus: string) => {
     if (newStatus === 'delete' && !confirm("完全に削除しますか?")) return;
+
     try {
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
       const res = await fetch(`http://localhost:3001/api/items/${id}`, {
         method, headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+
       if (!res.ok) {
         alert("更新に失敗しました。もう一度お試しください。");
         return;
       }
+
       refreshData();
     } catch (error) {
       console.error(error);
@@ -174,10 +159,12 @@ export default function Home() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expiry_date: newDate }),
       });
+
       if (!res.ok) {
         alert("期限の更新に失敗しました。");
         return;
       }
+
       refreshData();
     } catch (e) {
       console.error(e);
@@ -185,7 +172,6 @@ export default function Home() {
     }
   };
 
-  // --- 表示ロジック ---
   const displayItems = useMemo(() => {
     let filtered = items.filter(item => item.status === 'active');
 
@@ -273,6 +259,7 @@ export default function Home() {
           {selectedProduct && (
             <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 animate-slide-up relative">
               <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕ 戻る</button>
+
               <div className="text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name} />
@@ -311,19 +298,10 @@ export default function Home() {
           <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
 
           <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2 flex flex-col items-end">
-            {/* 検索バー */}
             <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="キーワード検索..." className="w-full p-3 border rounded-xl shadow-sm" />
-<<<<<<< HEAD
 
-            {/* ★ 修正：フィルタを右寄せにするため、親要素に flex-col items-end を追加し、ここは w-auto のまま ★ */}
             <select
               value={filterOption}
-=======
-            
-            {/* フィルタプルダウンを右端に配置するため、親要素に flex-col items-end を指定し、ここは w-auto のままにしている */}
-            <select 
-              value={filterOption} 
->>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
               onChange={(e) => setFilterOption(e.target.value as 'all' | 'safe' | 'expired')}
               className="w-auto p-2 border rounded-lg bg-white text-sm font-bold text-gray-600 cursor-pointer"
               aria-label="在庫の表示フィルター"
@@ -336,14 +314,7 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-<<<<<<< HEAD
               const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0, 0, 0, 0));
-=======
-              const expiryDate = new Date(item.expiry_date);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const isExpired = expiryDate < today;
->>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
 
@@ -368,49 +339,9 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-black/5">
-<<<<<<< HEAD
                     <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
                     <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
                     <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
-=======
-                    {item.status === 'active' ? (
-                      <>
-                        <button
-                          onClick={() => updateStatus(item.id, 'consumed')}
-                          className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold"
-                        >
-                          😋 完食
-                        </button>
-                        <button
-                          onClick={() => updateStatus(item.id, 'discarded')}
-                          className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold"
-                        >
-                          😱 廃棄
-                        </button>
-                        <button
-                          onClick={() => updateStatus(item.id, 'delete')}
-                          className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500"
-                        >
-                          🗑️
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => updateStatus(item.id, 'active')}
-                          className="flex-1 bg-blue-100 text-blue-800 hover:bg-blue-200 py-2 rounded-lg font-bold"
-                        >
-                          ↩️ 元に戻す
-                        </button>
-                        <button
-                          onClick={() => updateStatus(item.id, 'delete')}
-                          className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500"
-                        >
-                          🗑️
-                        </button>
-                      </>
-                    )}
->>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
                   </div>
                 </div>
               );
