@@ -9,16 +9,16 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'add' | 'inventory'>('add');
   const [items, setItems] = useState<InventoryItem[]>([]);
-  
+
   const [inputCode, setInputCode] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
-  
+
   const [filterOption, setFilterOption] = useState<'all' | 'safe' | 'expired'>('all');
 
   // 候補リスト
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
-  
+
   const [expiryDate, setExpiryDate] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,15 +52,15 @@ export default function Home() {
     const targetCode = typeof codeOverride === 'string' ? codeOverride : inputCode;
     if (!targetCode) return;
     setLoading(true);
-    setCandidates([]);      
-    setSelectedProduct(null); 
+    setCandidates([]);
+    setSelectedProduct(null);
     setCurrentPage(1);
     if (targetCode !== inputCode) setInputCode(targetCode);
 
     try {
       const res = await fetch(`http://localhost:3001/api/product?code=${encodeURIComponent(targetCode)}`);
       if (!res.ok) { alert("商品が見つかりませんでした"); return; }
-      
+
       const results: ProductSearchResult[] = await res.json();
       const uniqueItems: ProductSearchResult[] = [];
       const seenCodes = new Set();
@@ -77,7 +77,7 @@ export default function Home() {
       if (uniqueItems.length === 0) alert("商品が見つかりませんでした");
       else setCandidates(uniqueItems);
 
-    } catch (error) { console.error(error); alert("検索エラー"); } 
+    } catch (error) { console.error(error); alert("検索エラー"); }
     finally { setLoading(false); }
   };
 
@@ -102,36 +102,61 @@ export default function Home() {
   const registerItem = async () => {
     if (!selectedProduct) return;
     const finalDate = expiryDate || getFutureDate(7);
-    await fetch("http://localhost:3001/api/items", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
-        image: selectedProduct.image, expiry_date: finalDate
-      }),
-    });
-    alert(`「${selectedProduct.name}」を追加しました！`);
-    setCandidates([]); setSelectedProduct(null); setInputCode(""); refreshData();
+    try {
+      const res = await fetch("http://localhost:3001/api/items", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
+          image: selectedProduct.image, expiry_date: finalDate
+        }),
+      });
+      if (!res.ok) {
+        alert("登録に失敗しました。もう一度お試しください。");
+        return;
+      }
+      alert(`「${selectedProduct.name}」を追加しました！`);
+      setCandidates([]); setSelectedProduct(null); setInputCode(""); refreshData();
+    } catch (error) {
+      console.error(error);
+      alert("ネットワークエラーが発生しました。");
+    }
   };
 
   const updateStatus = async (id: string, newStatus: string) => {
-    if (newStatus === 'delete' && !confirm("完全に削除しますか？")) return;
-    const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
-    await fetch(`http://localhost:3001/api/items/${id}`, {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    refreshData();
+    if (newStatus === 'delete' && !confirm("完全に削除しますか?")) return;
+    try {
+      const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
+      const res = await fetch(`http://localhost:3001/api/items/${id}`, {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        alert("更新に失敗しました。もう一度お試しください。");
+        return;
+      }
+      refreshData();
+    } catch (error) {
+      console.error(error);
+      alert("ネットワークエラーが発生しました。");
+    }
   };
 
   const updateExpiryDate = async (id: string, newDate: string) => {
     if (!newDate) return;
     try {
-      await fetch(`http://localhost:3001/api/items/${id}`, {
+      const res = await fetch(`http://localhost:3001/api/items/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expiry_date: newDate }),
       });
+      if (!res.ok) {
+        alert("期限の更新に失敗しました。");
+        return;
+      }
       refreshData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      alert("ネットワークエラーが発生しました。");
+    }
   };
 
   // --- 表示ロジック ---
@@ -171,7 +196,7 @@ export default function Home() {
       {activeTab === 'add' && (
         <div className="p-6 flex flex-col items-center animate-fade-in w-full">
           <h1 className="text-2xl font-bold mb-8 text-gray-800">🛍️ 商品を追加</h1>
-          
+
           <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             {!isScanning ? (
               <>
@@ -201,7 +226,7 @@ export default function Home() {
                 {currentCandidates.map((cand, idx) => (
                   <div key={idx} onClick={() => setSelectedProduct(cand)} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-blue-50 transition-colors">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={cand.image} className="w-16 h-16 object-contain bg-white rounded" alt={cand.name}/>
+                    <img src={cand.image} className="w-16 h-16 object-contain bg-white rounded" alt={cand.name} />
                     <div className="flex-1">
                       <h3 className="font-bold text-gray-800 text-sm line-clamp-2">{cand.name}</h3>
                       <p className="text-xs text-gray-500 mt-1">タップして選択</p>
@@ -224,9 +249,9 @@ export default function Home() {
               <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕ 戻る</button>
               <div className="text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name}/>
+                <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name} />
                 <h3 className="font-bold text-gray-800 mb-6">{selectedProduct.name}</h3>
-                
+
                 <div className="mb-6">
                   <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
                   <div className="grid grid-cols-4 gap-2 mb-3">
@@ -252,16 +277,17 @@ export default function Home() {
       {activeTab === 'inventory' && (
         <div className="p-4 flex flex-col items-center animate-fade-in w-full">
           <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
-          
+
           <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2 flex flex-col items-end">
             {/* 検索バー */}
             <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="キーワード検索..." className="w-full p-3 border rounded-xl shadow-sm" />
-            
+
             {/* ★ 修正：フィルタを右寄せにするため、親要素に flex-col items-end を追加し、ここは w-auto のまま ★ */}
-            <select 
-              value={filterOption} 
+            <select
+              value={filterOption}
               onChange={(e) => setFilterOption(e.target.value as 'all' | 'safe' | 'expired')}
               className="w-auto p-2 border rounded-lg bg-white text-sm font-bold text-gray-600 cursor-pointer"
+              aria-label="在庫の表示フィルター"
             >
               <option value="all">👁️ すべて表示</option>
               <option value="safe">✅ 期限内のみ</option>
@@ -271,7 +297,7 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-              const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0,0,0,0));
+              const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0, 0, 0, 0));
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
 
@@ -279,14 +305,14 @@ export default function Home() {
                 <div key={item.id} className={`${cardClass} p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-colors duration-300`}>
                   <div className="flex items-center gap-4">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.image_url || "https://placehold.co/80x80"} className="w-16 h-16 object-cover rounded-lg bg-white" alt={item.name}/>
+                    <img src={item.image_url || "https://placehold.co/80x80"} className="w-16 h-16 object-cover rounded-lg bg-white" alt={item.name} />
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-base truncate text-gray-800">{item.name}</h3>
                       <p className="text-sm text-gray-800 opacity-90 mt-1 flex items-center gap-1">
-                        期限: 
-                        <input 
-                          type="date" 
-                          value={item.expiry_date} 
+                        期限:
+                        <input
+                          type="date"
+                          value={item.expiry_date}
                           onChange={(e) => updateExpiryDate(item.id, e.target.value)}
                           className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
                         />
@@ -297,12 +323,16 @@ export default function Home() {
                   <div className="flex gap-2 pt-2 border-t border-black/5">
                     <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
                     <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
-                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500">🗑️</button>
+                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
                   </div>
                 </div>
               );
             })}
-            {displayItems.length === 0 && <div className="text-center py-10 text-gray-400">表示する在庫がありません</div>}
+            {displayItems.length === 0 && (
+              <div className="text-center py-10 text-gray-400">
+                {inventorySearch ? "検索条件に一致する在庫がありません" : "表示する在庫がありません"}
+              </div>
+            )}
           </div>
         </div>
       )}
