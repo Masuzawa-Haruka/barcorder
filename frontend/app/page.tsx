@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -6,17 +7,19 @@ import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'add' | 'inventory' | 'analysis'>('add');
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  const [activeTab, setActiveTab] = useState<'add' | 'inventory'>('add');
   const [items, setItems] = useState<InventoryItem[]>([]);
 
   const [inputCode, setInputCode] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
 
-  // 候補リスト
+  const [filterOption, setFilterOption] = useState<'all' | 'safe' | 'expired'>('all');
+
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
 
-  // ★ 新規追加時の期限日ステート
   const [expiryDate, setExpiryDate] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -24,35 +27,30 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  // --- 便利な日付計算関数 ---
   const getFutureDate = (days: number) => {
     const date = new Date();
     date.setDate(date.getDate() + days);
     return date.toISOString().split('T')[0];
   };
 
-  // データ取得
   const refreshData = async () => {
     try {
-      const res = await fetch("http://localhost:3001/api/items");
+      const res = await fetch(`${API_URL}/api/items`);
       if (res.ok) setItems(await res.json());
     } catch (err) { console.error(err); }
   };
 
   useEffect(() => { refreshData(); }, [activeTab]);
 
-  // 商品選択時にデフォルトの日付(1週間後)をセット
   useEffect(() => {
     if (selectedProduct) {
       setExpiryDate(getFutureDate(7));
     }
   }, [selectedProduct]);
 
-  // 検索ロジック (Open Food Facts)
   const searchProduct = async (codeOverride?: string) => {
     const targetCode = typeof codeOverride === 'string' ? codeOverride : inputCode;
     if (!targetCode) return;
-
     setLoading(true);
     setCandidates([]);
     setSelectedProduct(null);
@@ -60,31 +58,19 @@ export default function Home() {
     if (targetCode !== inputCode) setInputCode(targetCode);
 
     try {
-      const res = await fetch(`http://localhost:3001/api/product?code=${encodeURIComponent(targetCode)}`);
-
-      if (!res.ok) {
-        alert("商品が見つかりませんでした");
-        return;
-      }
+      const res = await fetch(`${API_URL}/api/product?code=${encodeURIComponent(targetCode)}`);
+      if (!res.ok) { alert("商品が見つかりませんでした"); return; }
 
       const results: ProductSearchResult[] = await res.json();
-
-      // 重複排除
       const uniqueItems: ProductSearchResult[] = [];
       const seenCodes = new Set();
       const seenNames = new Set();
 
       results.forEach((item) => {
         if (item.code) {
-          if (!seenCodes.has(item.code)) {
-            seenCodes.add(item.code);
-            uniqueItems.push(item);
-          }
+          if (!seenCodes.has(item.code)) { seenCodes.add(item.code); uniqueItems.push(item); }
         } else {
-          if (!seenNames.has(item.name)) {
-            seenNames.add(item.name);
-            uniqueItems.push(item);
-          }
+          if (!seenNames.has(item.name)) { seenNames.add(item.name); uniqueItems.push(item); }
         }
       });
 
@@ -117,15 +103,12 @@ export default function Home() {
     setTimeout(() => searchProduct(result), 300);
   };
 
-  // ★ 登録処理(選択された日付を使う)
   const registerItem = async () => {
     if (!selectedProduct) return;
-
-    // 日付が空ならデフォルト7日後
     const finalDate = expiryDate || getFutureDate(7);
 
     try {
-      const res = await fetch("http://localhost:3001/api/items", {
+      const res = await fetch(`${API_URL}/api/items`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
@@ -149,13 +132,12 @@ export default function Home() {
     }
   };
 
-  // ステータス更新
   const updateStatus = async (id: string, newStatus: string) => {
     if (newStatus === 'delete' && !confirm("完全に削除しますか?")) return;
 
     try {
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
-      const res = await fetch(`http://localhost:3001/api/items/${id}`, {
+      const res = await fetch(`${API_URL}/api/items/${id}`, {
         method, headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -172,11 +154,10 @@ export default function Home() {
     }
   };
 
-  // ★ 日付更新機能(在庫リストから編集用)
   const updateExpiryDate = async (id: string, newDate: string) => {
     if (!newDate) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/items/${id}`, {
+      const res = await fetch(`${API_URL}/api/items/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expiry_date: newDate }),
       });
@@ -194,28 +175,25 @@ export default function Home() {
   };
 
   const displayItems = useMemo(() => {
-    let filtered = items;
-    if (inventorySearch) {
-      filtered = items.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
-    }
-    return filtered.sort((a, b) => {
-      if (a.status === 'active' && b.status !== 'active') return -1;
-      if (a.status !== 'active' && b.status === 'active') return 1;
-      if (a.status === 'active') return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-      return 0;
-    });
-  }, [inventorySearch, items]);
+    let filtered = items.filter(item => item.status === 'active');
 
-  const stats = useMemo(() => {
-    const total = items.length || 1;
-    const active = items.filter(i => i.status === 'active').length;
-    const consumed = items.filter(i => i.status === 'consumed').length;
-    const discarded = items.filter(i => i.status === 'discarded').length;
-    return {
-      active: (active / total) * 100, consumed: (consumed / total) * 100, discarded: (discarded / total) * 100,
-      counts: { active, consumed, discarded }
-    };
-  }, [items]);
+    if (inventorySearch) {
+      filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (filterOption === 'safe') {
+      filtered = filtered.filter(item => new Date(item.expiry_date) >= today);
+    } else if (filterOption === 'expired') {
+      filtered = filtered.filter(item => new Date(item.expiry_date) < today);
+    }
+
+    return filtered.sort((a, b) => {
+      return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+    });
+  }, [inventorySearch, items, filterOption]);
 
   const currentCandidates = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -233,7 +211,6 @@ export default function Home() {
         <div className="p-6 flex flex-col items-center animate-fade-in w-full">
           <h1 className="text-2xl font-bold mb-8 text-gray-800">🛍️ 商品を追加</h1>
 
-          {/* 検索フォーム */}
           <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             {!isScanning ? (
               <>
@@ -256,17 +233,12 @@ export default function Home() {
             )}
           </div>
 
-          {/* 候補リスト */}
           {candidates.length > 0 && !selectedProduct && (
             <div className="w-full max-w-md animate-slide-up">
               <h2 className="text-lg font-bold text-gray-700 mb-3 ml-2">検索結果 ({candidates.length}件)</h2>
               <div className="space-y-3">
                 {currentCandidates.map((cand, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedProduct(cand)}
-                    className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-blue-50 transition-colors"
-                  >
+                  <div key={idx} onClick={() => setSelectedProduct(cand)} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-blue-50 transition-colors">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={cand.image} className="w-16 h-16 object-contain bg-white rounded" alt={cand.name} />
                     <div className="flex-1">
@@ -286,7 +258,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* ★ 選択後の期限設定エリア ★ */}
           {selectedProduct && (
             <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 animate-slide-up relative">
               <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕ 戻る</button>
@@ -296,33 +267,27 @@ export default function Home() {
                 <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name} />
                 <h3 className="font-bold text-gray-800 mb-6">{selectedProduct.name}</h3>
 
-                {/* 期限設定UI */}
                 <div className="mb-6">
                   <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
-
-                  {/* ショートカットボタン */}
                   <div className="grid grid-cols-4 gap-2 mb-3">
                     <button onClick={() => setExpiryDate(getFutureDate(1))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">明日</button>
                     <button onClick={() => setExpiryDate(getFutureDate(3))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
                     <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
                     <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
                   </div>
-
-                  {/* カレンダー入力 */}
                   <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
                     <span className="text-xl">📅</span>
                     <input
                       type="date"
                       value={expiryDate}
                       onChange={(e) => setExpiryDate(e.target.value)}
+                      aria-label="賞味期限を選択"
                       className="bg-transparent flex-1 outline-none text-gray-700 font-bold"
                     />
                   </div>
                 </div>
 
-                <button onClick={registerItem} className="w-full bg-green-500 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-600">
-                  完了 (在庫に追加)
-                </button>
+                <button onClick={registerItem} className="w-full bg-green-500 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-600">完了 (在庫に追加)</button>
               </div>
             </div>
           )}
@@ -331,29 +296,29 @@ export default function Home() {
 
       {/* TAB 2: 在庫 */}
       {activeTab === 'inventory' && (
-        <div className="p-4 flex flex-col items-center animate-fade-in">
-          <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 在庫と履歴</h1>
-          <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-4">
-            <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="検索..." className="w-full p-3 border rounded-xl shadow-sm" />
+        <div className="p-4 flex flex-col items-center animate-fade-in w-full">
+          <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
+
+          <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2 flex flex-col items-end">
+            <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="キーワード検索..." className="w-full p-3 border rounded-xl shadow-sm" />
+
+            <select
+              value={filterOption}
+              onChange={(e) => setFilterOption(e.target.value as 'all' | 'safe' | 'expired')}
+              className="w-auto p-2 border rounded-lg bg-white text-sm font-bold text-gray-600 cursor-pointer"
+              aria-label="在庫の表示フィルター"
+            >
+              <option value="all">👁️ すべて表示</option>
+              <option value="safe">✅ 期限内のみ</option>
+              <option value="expired">⚠️ 期限切れのみ</option>
+            </select>
           </div>
-          <div className="w-full max-w-md space-y-3">
+
+          <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-              const isExpired = item.status === 'active' && new Date(item.expiry_date) < new Date();
-
+              const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0, 0, 0, 0));
               let cardClass = "bg-white border-gray-200";
-              let textClass = "text-gray-800";
-              let badgeClass = "hidden";
-              let statusText = "";
-
-              if (item.status === 'consumed') {
-                cardClass = "bg-green-50 border-green-200 opacity-80";
-                badgeClass = "bg-green-100 text-green-800";
-                statusText = "😋 完食";
-              } else if (item.status === 'discarded') {
-                cardClass = "bg-red-50 border-red-200 opacity-80";
-                badgeClass = "bg-red-100 text-red-800";
-                statusText = "😱 廃棄";
-              }
+              if (isExpired) cardClass = "bg-red-50 border-red-300";
 
               return (
                 <div key={item.id} className={`${cardClass} p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-colors duration-300`}>
@@ -361,58 +326,33 @@ export default function Home() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.image_url || "https://placehold.co/80x80"} className="w-16 h-16 object-cover rounded-lg bg-white" alt={item.name} />
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-bold text-base truncate ${textClass}`}>{item.name}</h3>
-                      <p className={`text-sm ${textClass} opacity-90 mt-1 flex items-center gap-1`}>
-                        {item.status === 'active' ? (
-                          <>
-                            期限:
-                            {/* ★ 日付編集機能：クリックでカレンダーが開く */}
-                            <input
-                              type="date"
-                              value={item.expiry_date}
-                              onChange={(e) => updateExpiryDate(item.id, e.target.value)}
-                              className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-gray-100 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
-                            />
-                          </>
-                        ) : <span className={`px-2 py-1 rounded text-xs font-bold ${badgeClass}`}>{statusText}</span>}
+                      <h3 className="font-bold text-base truncate text-gray-800">{item.name}</h3>
+                      <p className="text-sm text-gray-800 opacity-90 mt-1 flex items-center gap-1">
+                        期限:
+                        <input
+                          type="date"
+                          value={item.expiry_date}
+                          onChange={(e) => updateExpiryDate(item.id, e.target.value)}
+                          aria-label={`${item.name}の賞味期限を編集`}
+                          className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
+                        />
+                        {isExpired && <span className="text-xs bg-red-500 text-white px-1 py-0.5 rounded ml-1 font-bold">期限切れ</span>}
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-black/5">
-                    {item.status === 'active' ? (
-                      <>
-                        <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
-                        <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
-                      </>
-                    ) : (
-                      <button onClick={() => updateStatus(item.id, 'active')} className="flex-1 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 py-2 rounded-lg font-bold">↩ 元に戻す</button>
-                    )}
-                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500">🗑️</button>
+                    <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
+                    <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
+                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
                   </div>
                 </div>
               );
             })}
-            {displayItems.length === 0 && <div className="text-center py-10 text-gray-400">データなし</div>}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: 分析 */}
-      {activeTab === 'analysis' && (
-        <div className="p-6 flex flex-col items-center animate-fade-in">
-          <h1 className="text-2xl font-bold mb-8 text-gray-800">📊 傾向レポート</h1>
-          <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-gray-500 font-bold mb-6 text-center">アイテムの状態内訳</h2>
-            <div className="w-full h-8 flex rounded-full overflow-hidden bg-gray-100 mb-6 shadow-inner">
-              <div style={{ width: `${stats.active}%` }} className="bg-gray-300 h-full" />
-              <div style={{ width: `${stats.consumed}%` }} className="bg-green-400 h-full" />
-              <div style={{ width: `${stats.discarded}%` }} className="bg-red-400 h-full" />
-            </div>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50"><span className="flex items-center gap-2 font-bold text-gray-600"><span className="w-3 h-3 rounded-full bg-gray-300"></span>在庫中</span><span className="font-bold text-xl">{stats.counts.active}</span></div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-green-50"><span className="flex items-center gap-2 font-bold text-green-800"><span className="w-3 h-3 rounded-full bg-green-400"></span>完食</span><span className="font-bold text-xl text-green-700">{stats.counts.consumed}</span></div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-red-50"><span className="flex items-center gap-2 font-bold text-red-800"><span className="w-3 h-3 rounded-full bg-red-400"></span>廃棄</span><span className="font-bold text-xl text-red-700">{stats.counts.discarded}</span></div>
-            </div>
+            {displayItems.length === 0 && (
+              <div className="text-center py-10 text-gray-400">
+                {inventorySearch ? "検索条件に一致する在庫がありません" : "表示する在庫がありません"}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -421,7 +361,6 @@ export default function Home() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-4 shadow z-50">
         <button onClick={() => setActiveTab('add')} className={`flex-1 flex flex-col items-center ${activeTab === 'add' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">🛍️</span><span className="text-[10px] font-bold">追加</span></button>
         <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center ${activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">📦</span><span className="text-[10px] font-bold">在庫</span></button>
-        <button onClick={() => setActiveTab('analysis')} className={`flex-1 flex flex-col items-center ${activeTab === 'analysis' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">📊</span><span className="text-[10px] font-bold">分析</span></button>
       </div>
     </main>
   );
