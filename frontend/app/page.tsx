@@ -77,8 +77,19 @@ export default function Home() {
       if (uniqueItems.length === 0) alert("商品が見つかりませんでした");
       else setCandidates(uniqueItems);
 
+<<<<<<< HEAD
     } catch (error) { console.error(error); alert("検索エラー"); }
     finally { setLoading(false); }
+=======
+    } catch (error) {
+      // 開発者向けの詳細ログ
+      console.error("商品検索処理中にエラーが発生しました:", error);
+      // ユーザー向けの分かりやすいメッセージ
+      alert("商品検索中にエラーが発生しました。通信環境を確認のうえ、時間をおいて再度お試しください。");
+    } finally {
+      setLoading(false);
+    }
+>>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,7 +100,7 @@ export default function Home() {
       const html5QrCode = new Html5Qrcode("reader-hidden");
       const result = await html5QrCode.scanFileV2(file, true);
       if (result && result.decodedText) searchProduct(result.decodedText);
-      else alert("バーコード検出失敗");
+      else alert("バーコードを検出できませんでした");
     } catch (err) { alert("読み取り失敗"); }
     finally { setLoading(false); e.target.value = ""; }
   };
@@ -102,6 +113,7 @@ export default function Home() {
   const registerItem = async () => {
     if (!selectedProduct) return;
     const finalDate = expiryDate || getFutureDate(7);
+<<<<<<< HEAD
     try {
       const res = await fetch("http://localhost:3001/api/items", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -120,6 +132,20 @@ export default function Home() {
       console.error(error);
       alert("ネットワークエラーが発生しました。");
     }
+=======
+    await fetch("http://localhost:3001/api/items", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
+        image: selectedProduct.image, expiry_date: finalDate
+      }),
+    });
+    alert(`「${selectedProduct.name}」を追加しました！`);
+    setCandidates([]);
+    setSelectedProduct(null);
+    setInputCode("");
+    refreshData();
+>>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
   };
 
   const updateStatus = async (id: string, newStatus: string) => {
@@ -255,14 +281,20 @@ export default function Home() {
                 <div className="mb-6">
                   <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
                   <div className="grid grid-cols-4 gap-2 mb-3">
+                    <button onClick={() => setExpiryDate(getFutureDate(1))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">明日</button>
                     <button onClick={() => setExpiryDate(getFutureDate(3))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
                     <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(14))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">2週間</button>
                     <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
                   </div>
                   <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
                     <span className="text-xl">📅</span>
-                    <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="bg-transparent flex-1 outline-none text-gray-700 font-bold" />
+                    <input
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                      aria-label="賞味期限を選択"
+                      className="bg-transparent flex-1 outline-none text-gray-700 font-bold"
+                    />
                   </div>
                 </div>
 
@@ -281,10 +313,17 @@ export default function Home() {
           <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2 flex flex-col items-end">
             {/* 検索バー */}
             <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="キーワード検索..." className="w-full p-3 border rounded-xl shadow-sm" />
+<<<<<<< HEAD
 
             {/* ★ 修正：フィルタを右寄せにするため、親要素に flex-col items-end を追加し、ここは w-auto のまま ★ */}
             <select
               value={filterOption}
+=======
+            
+            {/* フィルタプルダウンを右端に配置するため、親要素に flex-col items-end を指定し、ここは w-auto のままにしている */}
+            <select 
+              value={filterOption} 
+>>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
               onChange={(e) => setFilterOption(e.target.value as 'all' | 'safe' | 'expired')}
               className="w-auto p-2 border rounded-lg bg-white text-sm font-bold text-gray-600 cursor-pointer"
               aria-label="在庫の表示フィルター"
@@ -297,7 +336,14 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
+<<<<<<< HEAD
               const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0, 0, 0, 0));
+=======
+              const expiryDate = new Date(item.expiry_date);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const isExpired = expiryDate < today;
+>>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
 
@@ -314,6 +360,7 @@ export default function Home() {
                           type="date"
                           value={item.expiry_date}
                           onChange={(e) => updateExpiryDate(item.id, e.target.value)}
+                          aria-label={`${item.name}の賞味期限を編集`}
                           className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
                         />
                         {isExpired && <span className="text-xs bg-red-500 text-white px-1 py-0.5 rounded ml-1 font-bold">期限切れ</span>}
@@ -321,9 +368,49 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-black/5">
+<<<<<<< HEAD
                     <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
                     <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
                     <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
+=======
+                    {item.status === 'active' ? (
+                      <>
+                        <button
+                          onClick={() => updateStatus(item.id, 'consumed')}
+                          className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold"
+                        >
+                          😋 完食
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'discarded')}
+                          className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold"
+                        >
+                          😱 廃棄
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'delete')}
+                          className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => updateStatus(item.id, 'active')}
+                          className="flex-1 bg-blue-100 text-blue-800 hover:bg-blue-200 py-2 rounded-lg font-bold"
+                        >
+                          ↩️ 元に戻す
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'delete')}
+                          className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
+>>>>>>> ce4131092dbabc6948aae9e7e3f8bd07e2b32f00
                   </div>
                 </div>
               );
