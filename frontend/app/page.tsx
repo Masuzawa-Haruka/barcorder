@@ -7,6 +7,8 @@ import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 export default function Home() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
   const [activeTab, setActiveTab] = useState<'add' | 'inventory'>('add');
   const [items, setItems] = useState<InventoryItem[]>([]);
 
@@ -33,7 +35,7 @@ export default function Home() {
 
   const refreshData = async () => {
     try {
-      const res = await fetch("http://localhost:3001/api/items");
+      const res = await fetch(`${API_URL}/api/items`);
       if (res.ok) setItems(await res.json());
     } catch (err) { console.error(err); }
   };
@@ -56,7 +58,7 @@ export default function Home() {
     if (targetCode !== inputCode) setInputCode(targetCode);
 
     try {
-      const res = await fetch(`http://localhost:3001/api/product?code=${encodeURIComponent(targetCode)}`);
+      const res = await fetch(`${API_URL}/api/product?code=${encodeURIComponent(targetCode)}`);
       if (!res.ok) { alert("商品が見つかりませんでした"); return; }
 
       const results: ProductSearchResult[] = await res.json();
@@ -106,7 +108,7 @@ export default function Home() {
     const finalDate = expiryDate || getFutureDate(7);
 
     try {
-      const res = await fetch("http://localhost:3001/api/items", {
+      const res = await fetch(`${API_URL}/api/items`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
@@ -135,7 +137,7 @@ export default function Home() {
 
     try {
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
-      const res = await fetch(`http://localhost:3001/api/items/${id}`, {
+      const res = await fetch(`${API_URL}/api/items/${id}`, {
         method, headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -155,7 +157,7 @@ export default function Home() {
   const updateExpiryDate = async (id: string, newDate: string) => {
     if (!newDate) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/items/${id}`, {
+      const res = await fetch(`${API_URL}/api/items/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expiry_date: newDate }),
       });
