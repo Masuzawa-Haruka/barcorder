@@ -197,12 +197,17 @@ export default function Home() {
     if (dateRangeStart && dateRangeEnd) {
       const start = new Date(dateRangeStart);
       const end = new Date(dateRangeEnd);
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return filtered; // 不正な日付の場合はフィルタリングを行わずそのまま返す
+      }
+
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
 
       filtered = filtered.filter(item => {
         const expiryDate = new Date(item.expiry_date);
-        return expiryDate >= start && expiryDate <= end;
+        return !isNaN(expiryDate.getTime()) && expiryDate >= start && expiryDate <= end;
       });
     }
 
@@ -297,7 +302,7 @@ export default function Home() {
                   >
                     <span className="text-xl">📅</span>
                     <span className="flex-1 text-left text-gray-700 font-bold">
-                      {expiryDate ? new Date(expiryDate).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/') : '日付を選択'}
+                      {expiryDate ? new Date(expiryDate).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '日付を選択'}
                     </span>
                   </button>
                 </div>

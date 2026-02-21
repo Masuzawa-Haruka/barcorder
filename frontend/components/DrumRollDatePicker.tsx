@@ -17,7 +17,12 @@ export function DrumRollDatePicker({
     const currentYear = new Date().getFullYear();
 
     // 年・月・日の選択肢を生成
-    const years = Array.from({ length: 10 }, (_, i) => (currentYear - 2 + i).toString());
+    const startYear = currentYear - 1;
+    const endYear = currentYear + 10;
+    const years = Array.from(
+        { length: endYear - startYear + 1 },
+        (_, i) => (startYear + i).toString()
+    );
     const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
     const getDaysInMonth = (year: number, month: number) => {
         return new Date(year, month, 0).getDate();
