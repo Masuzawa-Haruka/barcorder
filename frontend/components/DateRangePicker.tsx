@@ -112,7 +112,7 @@ export function DateRangePicker({
                 <DrumRollDatePicker
                     initialDate={localStartDate ? new Date(localStartDate) : new Date()}
                     onConfirm={(date) => {
-                        setLocalStartDate(date.toISOString().split('T')[0]);
+                        setLocalStartDate(getLocalDateString(date));
                         setShowStartPicker(false);
                     }}
                     onCancel={() => setShowStartPicker(false)}
@@ -124,7 +124,7 @@ export function DateRangePicker({
                 <DrumRollDatePicker
                     initialDate={localEndDate ? new Date(localEndDate) : new Date()}
                     onConfirm={(date) => {
-                        setLocalEndDate(date.toISOString().split('T')[0]);
+                        setLocalEndDate(getLocalDateString(date));
                         setShowEndPicker(false);
                     }}
                     onCancel={() => setShowEndPicker(false)}
