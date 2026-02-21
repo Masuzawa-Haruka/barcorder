@@ -52,6 +52,18 @@ export function DrumRollDatePicker({
         parseInt(pickerValue.year),
         parseInt(pickerValue.month)
     );
+
+    // 月や年が変更された際、選択中の「日」が存在しない日付（例: 2月31日）になっていれば自動補正する
+    useEffect(() => {
+        const currentDay = parseInt(pickerValue.day);
+        if (currentDay > daysInMonth) {
+            setPickerValue(prev => ({
+                ...prev,
+                day: daysInMonth.toString().padStart(2, '0')
+            }));
+        }
+    }, [pickerValue.year, pickerValue.month, daysInMonth, pickerValue.day]);
+
     const days = useMemo(() => {
         return Array.from({ length: daysInMonth }, (_, i) => (i + 1).toString().padStart(2, '0'));
     }, [daysInMonth]);

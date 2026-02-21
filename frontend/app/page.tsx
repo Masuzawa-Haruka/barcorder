@@ -229,7 +229,13 @@ export default function Home() {
         else end.setHours(23, 59, 59, 999);
       }
 
-      if (start || end) {
+      if (start && end && start > end) {
+        // 開始日と終了日の大小関係チェック（開始日が終了日より後の場合はフィルタリングを行わない）
+        console.warn("日付範囲が不正なためフィルタリングをスキップします", {
+          start,
+          end,
+        });
+      } else if (start || end) {
         filtered = filtered.filter(item => {
           const expiryDate = new Date(item.expiry_date);
           if (isNaN(expiryDate.getTime())) {
@@ -385,7 +391,7 @@ export default function Home() {
             {(dateRangeStart || dateRangeEnd) && (
               <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
                 <span>
-                  {dateRangeStart || "指定なし"} 〜 {dateRangeEnd || "指定なし"}
+                  {dateRangeStart ? new Date(dateRangeStart).toLocaleDateString("ja-JP") : "指定なし"} 〜 {dateRangeEnd ? new Date(dateRangeEnd).toLocaleDateString("ja-JP") : "指定なし"}
                 </span>
                 <button
                   onClick={() => {
