@@ -129,27 +129,25 @@ export default function Home() {
           const trimmed = text.trim();
 
           if (trimmed) {
-            try {
-              // JSONとして解析できるか試行
+            const lowerTrimmed = trimmed.toLowerCase();
+
+            // HTMLかどうか先に判定
+            if (lowerTrimmed.startsWith("<!doctype") || lowerTrimmed.startsWith("<html")) {
+              errorMsg = "サーバーから予期しない形式のエラーレスポンスが返されました。";
+            } else {
+              // HTMLでなければJSONとして解析を試みる
               const errData = JSON.parse(trimmed);
               if (errData && errData.error) {
                 errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
                 console.error("API Error Details:", errData.error);
               }
-            } catch {
-              // JSONでない場合はHTMLかどうか判定
-              const lowerTrimmed = trimmed.toLowerCase();
-              if (lowerTrimmed.startsWith("<!doctype") || lowerTrimmed.startsWith("<html")) {
-                errorMsg = "サーバーから予期しない形式のエラーレスポンスが返されました。";
-              } else {
-                errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
-                console.error("API Raw Error:", trimmed);
-              }
             }
           }
         } catch (e) {
-          console.error("Error reading response:", e);
+          errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
+          console.error("Error processing response:", e);
         }
+
         alert(`登録に失敗しました。\n${errorMsg}`);
         return;
       }
