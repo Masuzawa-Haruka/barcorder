@@ -30,10 +30,15 @@ export function DateRangePicker({
     };
 
     const addDaysToStart = (days: number) => {
-        if (!localStartDate) return;
-        const start = new Date(localStartDate);
-        start.setDate(start.getDate() + days);
-        const endStr = start.toISOString().split('T')[0];
+        // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
+        const baseDate = localStartDate ? new Date(localStartDate) : new Date();
+        // 未設定だった場合は、基準日（＝今日）を開始日として反映する
+        if (!localStartDate) {
+            const startStr = baseDate.toISOString().split('T')[0];
+            setLocalStartDate(startStr);
+        }
+        baseDate.setDate(baseDate.getDate() + days);
+        const endStr = baseDate.toISOString().split('T')[0];
         setLocalEndDate(endStr);
     };
 

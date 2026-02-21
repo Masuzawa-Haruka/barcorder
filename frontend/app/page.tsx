@@ -128,7 +128,24 @@ export default function Home() {
           if (errData && errData.error) {
             errorMsg = `原因: ${errData.error}`;
           }
-        } catch (_) { }
+        } catch (_) {
+          // JSON でないレスポンスの場合はテキストとして内容を取得してエラー理由を補足する
+          try {
+            const text = await res.text();
+            const trimmed = text.trim();
+            if (trimmed) {
+              // HTMLエラーページなど、生テキストをそのまま出したくない場合はある程度マスクする
+              if (trimmed.startsWith("<")) {
+                // HTMLが返却されている可能性が高い場合は一般的なメッセージにとどめる
+                errorMsg = "サーバーから予期しない形式のエラーレスポンスが返されました。";
+              } else {
+                errorMsg = `原因: ${trimmed}`;
+              }
+            }
+          } catch {
+            // テキスト取得にも失敗した場合は既定メッセージのままにする
+          }
+        }
         alert(`登録に失敗しました。\n${errorMsg}`);
         return;
       }
@@ -193,22 +210,33 @@ export default function Home() {
       filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
     }
 
-    // 日付範囲でフィルタリング
-    if (dateRangeStart && dateRangeEnd) {
-      const start = new Date(dateRangeStart);
-      const end = new Date(dateRangeEnd);
+    // 日付範囲でフィルタリング (片方のみの指定も許可)
+    if (dateRangeStart || dateRangeEnd) {
+      let start: Date | null = null;
+      let end: Date | null = null;
 
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        return filtered; // 不正な日付の場合はフィルタリングを行わずそのまま返す
+      if (dateRangeStart) {
+        start = new Date(dateRangeStart);
+        if (isNaN(start.getTime())) start = null;
+        else start.setHours(0, 0, 0, 0);
       }
 
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
+      if (dateRangeEnd) {
+        end = new Date(dateRangeEnd);
+        if (isNaN(end.getTime())) end = null;
+        else end.setHours(23, 59, 59, 999);
+      }
 
-      filtered = filtered.filter(item => {
-        const expiryDate = new Date(item.expiry_date);
-        return !isNaN(expiryDate.getTime()) && expiryDate >= start && expiryDate <= end;
-      });
+      if (start || end) {
+        filtered = filtered.filter(item => {
+          const expiryDate = new Date(item.expiry_date);
+          if (isNaN(expiryDate.getTime())) return false;
+
+          if (start && expiryDate < start) return false;
+          if (end && expiryDate > end) return false;
+          return true;
+        });
+      }
     }
 
     return filtered.sort((a, b) => {

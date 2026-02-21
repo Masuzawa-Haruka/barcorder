@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Picker from "react-mobile-picker";
 
 interface DrumRollDatePickerProps {
@@ -10,20 +10,29 @@ interface DrumRollDatePickerProps {
 }
 
 export function DrumRollDatePicker({
-    initialDate = new Date(),
+    initialDate,
     onConfirm,
     onCancel
 }: DrumRollDatePickerProps) {
-    const currentYear = new Date().getFullYear();
+    // 1. initialDateの妥当性チェック
+    const safeInitialDate = useMemo(() => {
+        const d = initialDate || new Date();
+        return !Number.isNaN(d.getTime()) ? d : new Date();
+    }, [initialDate]);
 
-    // 年・月・日の選択肢を生成
-    const startYear = currentYear - 1;
-    const endYear = currentYear + 10;
-    const years = Array.from(
-        { length: endYear - startYear + 1 },
-        (_, i) => (startYear + i).toString()
-    );
-    const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+    // 2. 年・月の選択肢をメモ化
+    const { years, months } = useMemo(() => {
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear - 1;
+        const endYear = currentYear + 10;
+        const y = Array.from(
+            { length: endYear - startYear + 1 },
+            (_, i) => (startYear + i).toString()
+        );
+        const m = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+        return { years: y, months: m };
+    }, []);
+
     const getDaysInMonth = (year: number, month: number) => {
         return new Date(year, month, 0).getDate();
     };
@@ -33,9 +42,9 @@ export function DrumRollDatePicker({
         month: string;
         day: string;
     }>({
-        year: initialDate.getFullYear().toString(),
-        month: (initialDate.getMonth() + 1).toString().padStart(2, '0'),
-        day: initialDate.getDate().toString().padStart(2, '0'),
+        year: safeInitialDate.getFullYear().toString(),
+        month: (safeInitialDate.getMonth() + 1).toString().padStart(2, '0'),
+        day: safeInitialDate.getDate().toString().padStart(2, '0'),
     });
 
     // 選択された年月に応じて日数を動的に生成
@@ -43,7 +52,9 @@ export function DrumRollDatePicker({
         parseInt(pickerValue.year),
         parseInt(pickerValue.month)
     );
-    const days = Array.from({ length: daysInMonth }, (_, i) => (i + 1).toString().padStart(2, '0'));
+    const days = useMemo(() => {
+        return Array.from({ length: daysInMonth }, (_, i) => (i + 1).toString().padStart(2, '0'));
+    }, [daysInMonth]);
 
     const handleConfirm = () => {
         const selectedDate = new Date(
@@ -53,6 +64,17 @@ export function DrumRollDatePicker({
         );
         onConfirm(selectedDate);
     };
+
+    // 3. Escapeキーでのキャンセル
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onCancel();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onCancel]);
 
     return (
         <div
