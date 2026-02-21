@@ -137,7 +137,7 @@ app.post('/api/items', async (req, res) => {
             .select();
 
         if (error) {
-            console.error('Supabase POST /api/items エラー:', error);
+            console.error('POST /api/items Supabase エラー:', error);
             // Supabaseからのエラー内容はサーバーログに出力し、クライアントには汎用的なメッセージを返す
             return res.status(500).json({
                 error: 'データベースへの保存に失敗しました。管理画面でSupabaseの状態を確認してください。'
@@ -145,7 +145,7 @@ app.post('/api/items', async (req, res) => {
         }
         res.status(201).json(data[0]);
     } catch (e) {
-        console.error('POST /api/items キャッチエラー:', e);
+        console.error('POST /api/items catch エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
 });

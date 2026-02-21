@@ -30,6 +30,7 @@ export function DateRangePicker({
     };
 
     const getLocalDateString = (date: Date) => {
+        if (isNaN(date.getTime())) return "";
         return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
     };
 
@@ -47,6 +48,7 @@ export function DateRangePicker({
     const formatDate = (dateStr: string) => {
         if (!dateStr) return "";
         const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return "";
         return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
     };
 
