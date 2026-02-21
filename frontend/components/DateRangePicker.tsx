@@ -18,7 +18,7 @@ export function DateRangePicker({
     onEndDateChange,
     onClose
 }: DateRangePickerProps) {
-    const [localStartDate, setLocalStartDate] = useState(startDate || new Date().toISOString().split('T')[0]);
+    const [localStartDate, setLocalStartDate] = useState(startDate || "");
     const [localEndDate, setLocalEndDate] = useState(endDate);
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
@@ -29,17 +29,19 @@ export function DateRangePicker({
         onClose();
     };
 
+    const getLocalDateString = (date: Date) => {
+        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+    };
+
     const addDaysToStart = (days: number) => {
         // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
         const baseDate = localStartDate ? new Date(localStartDate) : new Date();
         // 未設定だった場合は、基準日（＝今日）を開始日として反映する
         if (!localStartDate) {
-            const startStr = baseDate.toISOString().split('T')[0];
-            setLocalStartDate(startStr);
+            setLocalStartDate(getLocalDateString(baseDate));
         }
         baseDate.setDate(baseDate.getDate() + days);
-        const endStr = baseDate.toISOString().split('T')[0];
-        setLocalEndDate(endStr);
+        setLocalEndDate(getLocalDateString(baseDate));
     };
 
     const formatDate = (dateStr: string) => {
