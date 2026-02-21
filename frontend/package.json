@@ -14,6 +14,7 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-mobile-picker": "^1.2.0",
     "react-zxing": "^2.1.0"
   },
   "devDependencies": {
