@@ -136,10 +136,17 @@ app.post('/api/items', async (req, res) => {
             .insert([{ name, barcode, image_url: image, expiry_date, status: 'active' }])
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            console.error('Supabase POST /api/items エラー:', error);
+            // エラーにHTMLが含まれている場合は、DB停止の旨を伝える
+            const msg = (error.message && error.message.includes('<html'))
+                ? 'データベース（Supabase）がオフラインになっています。ダッシュボードから起動してください。'
+                : 'データベースへの保存に失敗しました。';
+            return res.status(500).json({ error: msg });
+        }
         res.status(201).json(data[0]);
     } catch (e) {
-        console.error('POST /api/items エラー:', e);
+        console.error('POST /api/items キャッチエラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
 });

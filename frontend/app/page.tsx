@@ -122,7 +122,14 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        alert("登録に失敗しました。もう一度お試しください。");
+        let errorMsg = "もう一度お試しください。";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            errorMsg = `原因: ${errData.error}`;
+          }
+        } catch (_) { }
+        alert(`登録に失敗しました。\n${errorMsg}`);
         return;
       }
 
