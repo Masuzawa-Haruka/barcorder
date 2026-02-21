@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DrumRollDatePicker } from "./DrumRollDatePicker";
+import { formatDateForDisplay, getLocalDateString } from "../utils/dateUtils";
 
 interface DateRangePickerProps {
     startDate: string;
@@ -24,15 +25,22 @@ export function DateRangePicker({
     const [showEndPicker, setShowEndPicker] = useState(false);
 
     const handleApply = () => {
+        if (localStartDate && localEndDate) {
+            const start = new Date(localStartDate + "T00:00:00");
+            const end = new Date(localEndDate + "T00:00:00");
+            if (start > end) {
+                alert("開始日は終了日より前の日付を指定してください。");
+                setLocalStartDate("");
+                setLocalEndDate("");
+                return;
+            }
+        }
         onStartDateChange(localStartDate);
         onEndDateChange(localEndDate);
         onClose();
     };
 
-    const getLocalDateString = (date: Date) => {
-        if (isNaN(date.getTime())) return "";
-        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
-    };
+
 
     const addDaysToStart = (days: number) => {
         // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
@@ -45,24 +53,17 @@ export function DateRangePicker({
         setLocalEndDate(getLocalDateString(baseDate));
     };
 
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return "";
 
-        // "YYYY-MM-DD" 形式の文字列であれば、タイムゾーンによる日ズレを防ぐため文字列置換のみで処理する
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-            return dateStr.replace(/-/g, '/');
-        }
-
-        // それ以外の形式のフォールバック
-        const date = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`);
-        if (isNaN(date.getTime())) return "";
-        return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
-    };
 
     return (
         <>
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-                <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div
+                    className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                >
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-bold text-gray-800">賞味期限で検索</h2>
                         <button
@@ -79,9 +80,10 @@ export function DateRangePicker({
                         <label className="block text-sm font-bold text-gray-700 mb-2">いつから</label>
                         <button
                             onClick={() => setShowStartPicker(true)}
+                            aria-label="開始日を選択"
                             className="w-full px-4 py-3 text-base border-2 border-gray-300 rounded-xl bg-white hover:border-blue-500 focus:outline-none transition-colors text-left"
                         >
-                            {localStartDate ? formatDate(localStartDate) : "日付を選択"}
+                            {localStartDate ? formatDateForDisplay(localStartDate) : "日付を選択"}
                         </button>
                     </div>
 
@@ -90,9 +92,10 @@ export function DateRangePicker({
                         <label className="block text-sm font-bold text-gray-700 mb-2">いつまで</label>
                         <button
                             onClick={() => setShowEndPicker(true)}
+                            aria-label="終了日を選択"
                             className="w-full px-4 py-3 text-base border-2 border-gray-300 rounded-xl bg-white hover:border-blue-500 focus:outline-none transition-colors text-left"
                         >
-                            {localEndDate ? formatDate(localEndDate) : "日付を選択"}
+                            {localEndDate ? formatDateForDisplay(localEndDate) : "日付を選択"}
                         </button>
                     </div>
 
@@ -100,10 +103,34 @@ export function DateRangePicker({
                     <div className="mb-6">
                         <p className="text-xs text-gray-500 mb-2 font-bold">クイック設定</p>
                         <div className="grid grid-cols-4 gap-2">
-                            <button onClick={() => addDaysToStart(3)} className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
-                            <button onClick={() => addDaysToStart(7)} className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
-                            <button onClick={() => addDaysToStart(14)} className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">2週間</button>
-                            <button onClick={() => addDaysToStart(30)} className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
+                            <button
+                                onClick={() => addDaysToStart(3)}
+                                className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600"
+                                aria-label="3日後までの範囲を設定"
+                            >
+                                3日後
+                            </button>
+                            <button
+                                onClick={() => addDaysToStart(7)}
+                                className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600"
+                                aria-label="1週間後までの範囲を設定"
+                            >
+                                1週間
+                            </button>
+                            <button
+                                onClick={() => addDaysToStart(14)}
+                                className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600"
+                                aria-label="2週間後までの範囲を設定"
+                            >
+                                2週間
+                            </button>
+                            <button
+                                onClick={() => addDaysToStart(30)}
+                                className="px-2 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600"
+                                aria-label="1ヶ月後までの範囲を設定"
+                            >
+                                1ヶ月
+                            </button>
                         </div>
                     </div>
 

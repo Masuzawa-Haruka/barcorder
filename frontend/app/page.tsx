@@ -7,6 +7,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
+import { parseLocalDate, formatDateForDisplay } from "@/utils/dateUtils";
 
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -246,6 +247,8 @@ export default function Home() {
             });
             return false;
           }
+          // 境界条件を正確にするため時刻を0時0分に正規化する
+          expiryDate.setHours(0, 0, 0, 0);
 
           if (start && expiryDate < start) return false;
           if (end && expiryDate > end) return false;
@@ -391,7 +394,9 @@ export default function Home() {
             {(dateRangeStart || dateRangeEnd) && (
               <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
                 <span>
-                  {dateRangeStart ? new Date(dateRangeStart).toLocaleDateString("ja-JP") : "指定なし"} 〜 {dateRangeEnd ? new Date(dateRangeEnd).toLocaleDateString("ja-JP") : "指定なし"}
+                  {dateRangeStart && !dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 以降`}
+                  {!dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeEnd)} 以前`}
+                  {dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 〜 ${formatDateForDisplay(dateRangeEnd)}`}
                 </span>
                 <button
                   onClick={() => {
@@ -470,7 +475,7 @@ export default function Home() {
       {/* 賞味期限入力ドラムロールピッカー */}
       {showExpiryPicker && (
         <DrumRollDatePicker
-          initialDate={expiryDate ? new Date(expiryDate) : new Date(getFutureDate(7))}
+          initialDate={expiryDate ? parseLocalDate(expiryDate) : parseLocalDate(getFutureDate(7))}
           onConfirm={(date) => {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');

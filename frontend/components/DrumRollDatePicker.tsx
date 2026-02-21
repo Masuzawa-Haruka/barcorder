@@ -53,17 +53,6 @@ export function DrumRollDatePicker({
         parseInt(pickerValue.month)
     );
 
-    // 月や年が変更された際、選択中の「日」が存在しない日付（例: 2月31日）になっていれば自動補正する
-    useEffect(() => {
-        const currentDay = parseInt(pickerValue.day);
-        if (currentDay > daysInMonth) {
-            setPickerValue(prev => ({
-                ...prev,
-                day: daysInMonth.toString().padStart(2, '0')
-            }));
-        }
-    }, [pickerValue.year, pickerValue.month, daysInMonth, pickerValue.day]);
-
     const days = useMemo(() => {
         return Array.from({ length: daysInMonth }, (_, i) => (i + 1).toString().padStart(2, '0'));
     }, [daysInMonth]);
@@ -104,6 +93,7 @@ export function DrumRollDatePicker({
                 <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                     <button
                         onClick={onCancel}
+                        aria-label="日付選択をキャンセル"
                         className="text-blue-500 font-semibold text-base"
                     >
                         キャンセル
@@ -111,6 +101,7 @@ export function DrumRollDatePicker({
                     <h3 id="drumroll-picker-title" className="font-bold text-gray-800">日付を選択</h3>
                     <button
                         onClick={handleConfirm}
+                        aria-label="選択した日付を確定"
                         className="text-lime-500 font-bold text-base"
                     >
                         決定
@@ -121,7 +112,19 @@ export function DrumRollDatePicker({
                 <div className="py-4">
                     <Picker
                         value={pickerValue}
-                        onChange={(value) => setPickerValue(value as { year: string; month: string; day: string })}
+                        onChange={(value) => {
+                            const newYear = parseInt(value.year);
+                            const newMonth = parseInt(value.month);
+                            const newDaysInMonth = getDaysInMonth(newYear, newMonth);
+                            if (parseInt(value.day) > newDaysInMonth) {
+                                setPickerValue({
+                                    ...value,
+                                    day: newDaysInMonth.toString().padStart(2, '0')
+                                } as { year: string; month: string; day: string });
+                            } else {
+                                setPickerValue(value as { year: string; month: string; day: string });
+                            }
+                        }}
                         wheelMode="natural"
                         height={216}
                     >
