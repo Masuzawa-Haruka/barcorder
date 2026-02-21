@@ -136,10 +136,16 @@ app.post('/api/items', async (req, res) => {
             .insert([{ name, barcode, image_url: image, expiry_date, status: 'active' }])
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            console.error('POST /api/items Supabase エラー:', error);
+            // Supabaseからのエラー内容はサーバーログに出力し、クライアントには汎用的なメッセージを返す
+            return res.status(500).json({
+                error: 'データベースへの保存に失敗しました。管理画面でSupabaseの状態を確認してください。'
+            });
+        }
         res.status(201).json(data[0]);
     } catch (e) {
-        console.error('POST /api/items エラー:', e);
+        console.error('POST /api/items catch エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
 });
