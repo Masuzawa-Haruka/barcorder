@@ -47,7 +47,14 @@ export function DateRangePicker({
 
     const formatDate = (dateStr: string) => {
         if (!dateStr) return "";
-        const date = new Date(dateStr);
+
+        // "YYYY-MM-DD" 形式の文字列であれば、タイムゾーンによる日ズレを防ぐため文字列置換のみで処理する
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            return dateStr.replace(/-/g, '/');
+        }
+
+        // それ以外の形式のフォールバック
+        const date = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`);
         if (isNaN(date.getTime())) return "";
         return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
     };
