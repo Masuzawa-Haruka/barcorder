@@ -138,11 +138,10 @@ app.post('/api/items', async (req, res) => {
 
         if (error) {
             console.error('Supabase POST /api/items エラー:', error);
-            // エラーにHTMLが含まれている場合は、DB停止の旨を伝える
-            const msg = (error.message && error.message.includes('<html'))
-                ? 'データベース（Supabase）がオフラインになっています。ダッシュボードから起動してください。'
-                : 'データベースへの保存に失敗しました。';
-            return res.status(500).json({ error: msg });
+            // Supabaseからのエラー内容はサーバーログに出力し、クライアントには汎用的なメッセージを返す
+            return res.status(500).json({
+                error: 'データベースへの保存に失敗しました。管理画面でSupabaseの状態を確認してください。'
+            });
         }
         res.status(201).json(data[0]);
     } catch (e) {
