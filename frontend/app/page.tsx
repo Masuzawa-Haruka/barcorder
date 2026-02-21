@@ -238,7 +238,7 @@ export default function Home() {
         });
       } else if (start || end) {
         filtered = filtered.filter(item => {
-          const expiryDate = new Date(item.expiry_date);
+          const expiryDate = parseLocalDate(item.expiry_date);
           if (isNaN(expiryDate.getTime())) {
             // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
             console.warn("不正な有効期限のためアイテムを除外しました", {
@@ -247,8 +247,6 @@ export default function Home() {
             });
             return false;
           }
-          // 境界条件を正確にするため時刻を0時0分に正規化する
-          expiryDate.setHours(0, 0, 0, 0);
 
           if (start && expiryDate < start) return false;
           if (end && expiryDate > end) return false;
@@ -349,7 +347,7 @@ export default function Home() {
                   >
                     <span className="text-xl">📅</span>
                     <span className="flex-1 text-left text-gray-700 font-bold">
-                      {expiryDate ? new Date(expiryDate).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '日付を選択'}
+                      {expiryDate ? formatDateForDisplay(expiryDate) : '日付を選択'}
                     </span>
                   </button>
                 </div>

@@ -49,8 +49,8 @@ export function DrumRollDatePicker({
 
     // 選択された年月に応じて日数を動的に生成
     const daysInMonth = getDaysInMonth(
-        parseInt(pickerValue.year),
-        parseInt(pickerValue.month)
+        parseInt(pickerValue.year, 10),
+        parseInt(pickerValue.month, 10)
     );
 
     const days = useMemo(() => {
@@ -59,9 +59,9 @@ export function DrumRollDatePicker({
 
     const handleConfirm = () => {
         const selectedDate = new Date(
-            parseInt(pickerValue.year),
-            parseInt(pickerValue.month) - 1,
-            parseInt(pickerValue.day)
+            parseInt(pickerValue.year, 10),
+            parseInt(pickerValue.month, 10) - 1,
+            parseInt(pickerValue.day, 10)
         );
         onConfirm(selectedDate);
     };
@@ -113,10 +113,10 @@ export function DrumRollDatePicker({
                     <Picker
                         value={pickerValue}
                         onChange={(value) => {
-                            const newYear = parseInt(value.year);
-                            const newMonth = parseInt(value.month);
+                            const newYear = parseInt(value.year, 10);
+                            const newMonth = parseInt(value.month, 10);
                             const newDaysInMonth = getDaysInMonth(newYear, newMonth);
-                            if (parseInt(value.day) > newDaysInMonth) {
+                            if (parseInt(value.day, 10) > newDaysInMonth) {
                                 setPickerValue({
                                     ...value,
                                     day: newDaysInMonth.toString().padStart(2, '0')
