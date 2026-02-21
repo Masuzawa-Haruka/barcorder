@@ -256,7 +256,7 @@ export default function Home() {
     }
 
     return filtered.sort((a, b) => {
-      return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+      return parseLocalDate(a.expiry_date).getTime() - parseLocalDate(b.expiry_date).getTime();
     });
   }, [inventorySearch, items, dateRangeStart, dateRangeEnd]);
 
