@@ -118,6 +118,7 @@ export function DrumRollDatePicker({
                                 <Picker.Item key={year} value={year}>
                                     {({ selected }) => (
                                         <div
+                                            aria-label={`${year}年`}
                                             className={`flex items-center justify-center h-12 text-lg transition-all ${selected
                                                 ? 'font-bold text-gray-900 scale-110'
                                                 : 'text-gray-400'
@@ -135,6 +136,7 @@ export function DrumRollDatePicker({
                                 <Picker.Item key={month} value={month}>
                                     {({ selected }) => (
                                         <div
+                                            aria-label={`${month}月`}
                                             className={`flex items-center justify-center h-12 text-lg transition-all ${selected
                                                 ? 'font-bold text-gray-900 scale-110'
                                                 : 'text-gray-400'
@@ -152,6 +154,7 @@ export function DrumRollDatePicker({
                                 <Picker.Item key={day} value={day}>
                                     {({ selected }) => (
                                         <div
+                                            aria-label={`${day}日`}
                                             className={`flex items-center justify-center h-12 text-lg transition-all ${selected
                                                 ? 'font-bold text-gray-900 scale-110'
                                                 : 'text-gray-400'

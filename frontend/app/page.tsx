@@ -124,27 +124,31 @@ export default function Home() {
       if (!res.ok) {
         let errorMsg = "もう一度お試しください。";
         try {
-          const errData = await res.json();
-          if (errData && errData.error) {
-            errorMsg = `原因: ${errData.error}`;
-          }
-        } catch (_) {
-          // JSON でないレスポンスの場合はテキストとして内容を取得してエラー理由を補足する
-          try {
-            const text = await res.text();
-            const trimmed = text.trim();
-            if (trimmed) {
+          // res.json() と res.text() の2重読み取りを防ぐため、先にテキストとして取得する
+          const text = await res.text();
+          const trimmed = text.trim();
+
+          if (trimmed) {
+            try {
+              // JSONとして解析できるか試行
+              const errData = JSON.parse(trimmed);
+              if (errData && errData.error) {
+                errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
+                console.error("API Error Details:", errData.error);
+              }
+            } catch {
+              // JSONでない場合はHTMLかどうか判定
               const lowerTrimmed = trimmed.toLowerCase();
               if (lowerTrimmed.startsWith("<!doctype") || lowerTrimmed.startsWith("<html")) {
-                // HTMLが返却されている可能性が高い場合は一般的なメッセージにとどめる
                 errorMsg = "サーバーから予期しない形式のエラーレスポンスが返されました。";
               } else {
-                errorMsg = `原因: ${trimmed}`;
+                errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
+                console.error("API Raw Error:", trimmed);
               }
             }
-          } catch {
-            // テキスト取得にも失敗した場合は既定メッセージのままにする
           }
+        } catch (e) {
+          console.error("Error reading response:", e);
         }
         alert(`登録に失敗しました。\n${errorMsg}`);
         return;
@@ -233,7 +237,7 @@ export default function Home() {
           if (isNaN(expiryDate.getTime())) {
             // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
             console.warn("不正な有効期限のためアイテムを除外しました", {
-              id: (item as any).id,
+              id: item.id,
               expiry_date: item.expiry_date,
             });
             return false;
@@ -373,17 +377,17 @@ export default function Home() {
                 className="p-3 border rounded-xl shadow-sm bg-white hover:bg-blue-50 font-bold text-gray-700 text-sm flex items-center justify-center gap-1"
               >
                 📅 期限で検索
-                {dateRangeStart && dateRangeEnd && (
+                {(dateRangeStart || dateRangeEnd) && (
                   <span className="text-xs text-blue-600">●</span>
                 )}
               </button>
             </div>
 
             {/* 選択中の日付範囲を表示 */}
-            {dateRangeStart && dateRangeEnd && (
+            {(dateRangeStart || dateRangeEnd) && (
               <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
                 <span>
-                  {dateRangeStart} 〜 {dateRangeEnd}
+                  {dateRangeStart || "指定なし"} 〜 {dateRangeEnd || "指定なし"}
                 </span>
                 <button
                   onClick={() => {
