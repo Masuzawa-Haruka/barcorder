@@ -36,7 +36,7 @@ export function DateRangePicker({
 
     const addDaysToStart = (days: number) => {
         // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
-        const baseDate = localStartDate ? new Date(localStartDate) : new Date();
+        const baseDate = localStartDate ? new Date(localStartDate + 'T00:00:00') : new Date();
         // 未設定だった場合は、基準日（＝今日）を開始日として反映する
         if (!localStartDate) {
             setLocalStartDate(getLocalDateString(baseDate));
@@ -117,7 +117,7 @@ export function DateRangePicker({
             {/* ドラムロールピッカー - いつから */}
             {showStartPicker && (
                 <DrumRollDatePicker
-                    initialDate={localStartDate ? new Date(localStartDate) : new Date()}
+                    initialDate={localStartDate ? new Date(localStartDate + 'T00:00:00') : new Date()}
                     onConfirm={(date) => {
                         setLocalStartDate(getLocalDateString(date));
                         setShowStartPicker(false);
@@ -129,7 +129,7 @@ export function DateRangePicker({
             {/* ドラムロールピッカー - いつまで */}
             {showEndPicker && (
                 <DrumRollDatePicker
-                    initialDate={localEndDate ? new Date(localEndDate) : new Date()}
+                    initialDate={localEndDate ? new Date(localEndDate + 'T00:00:00') : new Date()}
                     onConfirm={(date) => {
                         setLocalEndDate(getLocalDateString(date));
                         setShowEndPicker(false);
