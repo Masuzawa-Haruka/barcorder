@@ -84,6 +84,9 @@ export function DrumRollDatePicker({
             <div
                 className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="drumroll-picker-title"
             >
                 {/* ヘッダー */}
                 <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
@@ -93,7 +96,7 @@ export function DrumRollDatePicker({
                     >
                         キャンセル
                     </button>
-                    <h3 className="font-bold text-gray-800">日付を選択</h3>
+                    <h3 id="drumroll-picker-title" className="font-bold text-gray-800">日付を選択</h3>
                     <button
                         onClick={handleConfirm}
                         className="text-lime-500 font-bold text-base"

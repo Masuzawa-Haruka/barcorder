@@ -51,18 +51,3 @@ body {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
-
-/* ボトムシートのスライドアップアニメーション */
-@keyframes slide-up {
-  from {
-    transform: translateY(100%);
-  }
-
-  to {
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
-}

@@ -54,7 +54,13 @@ export function DateRangePicker({
                 <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-bold text-gray-800">賞味期限で検索</h2>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                        <button
+                            onClick={onClose}
+                            aria-label="モーダルを閉じる"
+                            className="text-gray-400 hover:text-gray-600 text-2xl"
+                        >
+                            ✕
+                        </button>
                     </div>
 
                     {/* いつから */}

@@ -134,8 +134,8 @@ export default function Home() {
             const text = await res.text();
             const trimmed = text.trim();
             if (trimmed) {
-              // HTMLエラーページなど、生テキストをそのまま出したくない場合はある程度マスクする
-              if (trimmed.startsWith("<")) {
+              const lowerTrimmed = trimmed.toLowerCase();
+              if (lowerTrimmed.startsWith("<!doctype") || lowerTrimmed.startsWith("<html")) {
                 // HTMLが返却されている可能性が高い場合は一般的なメッセージにとどめる
                 errorMsg = "サーバーから予期しない形式のエラーレスポンスが返されました。";
               } else {
@@ -230,7 +230,14 @@ export default function Home() {
       if (start || end) {
         filtered = filtered.filter(item => {
           const expiryDate = new Date(item.expiry_date);
-          if (isNaN(expiryDate.getTime())) return false;
+          if (isNaN(expiryDate.getTime())) {
+            // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
+            console.warn("不正な有効期限のためアイテムを除外しました", {
+              id: (item as any).id,
+              expiry_date: item.expiry_date,
+            });
+            return false;
+          }
 
           if (start && expiryDate < start) return false;
           if (end && expiryDate > end) return false;
@@ -326,6 +333,7 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => setShowExpiryPicker(true)}
+                    aria-label="賞味期限を選択"
                     className="w-full flex items-center gap-2 bg-gray-50 p-3 rounded-lg border-2 border-gray-300 hover:border-blue-500 transition-colors"
                   >
                     <span className="text-xl">📅</span>
@@ -383,6 +391,7 @@ export default function Home() {
                     setDateRangeEnd("");
                   }}
                   className="text-red-500 hover:text-red-700 font-bold"
+                  aria-label="日付範囲フィルターを解除"
                 >
                   ✕
                 </button>
