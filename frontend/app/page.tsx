@@ -469,7 +469,7 @@ export default function Home() {
               <select
                 value={filterOption}
                 onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
-                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold outline-none"
+                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
               >
                 <option value="all">すべて表示</option>
                 <option value="expired">期限切れのみ</option>
@@ -479,7 +479,7 @@ export default function Home() {
               <select
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
-                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold outline-none"
+                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
               >
                 <option value="expiry_asc">期限が近い順</option>
                 <option value="created_desc">登録が新しい順</option>
