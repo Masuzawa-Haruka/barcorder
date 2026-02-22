@@ -3,6 +3,12 @@
 import { useState, useMemo, useEffect } from "react";
 import Picker from "react-mobile-picker";
 
+export interface PickerDateValue extends Record<string, string> {
+    year: string;
+    month: string;
+    day: string;
+}
+
 interface DrumRollDatePickerProps {
     initialDate?: Date;
     onConfirm: (date: Date) => void;
@@ -37,11 +43,7 @@ export function DrumRollDatePicker({
         return new Date(year, month, 0).getDate();
     };
 
-    const [pickerValue, setPickerValue] = useState<{
-        year: string;
-        month: string;
-        day: string;
-    }>({
+    const [pickerValue, setPickerValue] = useState<PickerDateValue>({
         year: safeInitialDate.getFullYear().toString(),
         month: (safeInitialDate.getMonth() + 1).toString().padStart(2, '0'),
         day: safeInitialDate.getDate().toString().padStart(2, '0'),
@@ -79,7 +81,7 @@ export function DrumRollDatePicker({
 
     return (
         <div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
             onClick={onCancel}
         >
             <div
@@ -120,9 +122,9 @@ export function DrumRollDatePicker({
                                 setPickerValue({
                                     ...value,
                                     day: newDaysInMonth.toString().padStart(2, '0')
-                                } as { year: string; month: string; day: string });
+                                } as PickerDateValue);
                             } else {
-                                setPickerValue(value as { year: string; month: string; day: string });
+                                setPickerValue(value as PickerDateValue);
                             }
                         }}
                         wheelMode="natural"

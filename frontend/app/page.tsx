@@ -7,7 +7,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
-import { parseLocalDate, formatDateForDisplay } from "@/utils/dateUtils";
+import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
 
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -124,20 +124,24 @@ export default function Home() {
 
       if (!res.ok) {
         let errorMsg = "もう一度お試しください。";
+        // レスポンス本文を外側の変数に保持して、catch内でも参照できるようにする
+        let text = "";
+        let trimmed = "";
         try {
           // res.json() と res.text() の2重読み取りを防ぐため、先にテキストとして取得する
-          const text = await res.text();
-          const trimmed = text.trim();
+          text = await res.text();
+          trimmed = text.trim();
 
           if (trimmed) {
             const lowerTrimmed = trimmed.toLowerCase();
 
             // HTMLかどうか先に判定
             if (lowerTrimmed.startsWith("<!doctype") || lowerTrimmed.startsWith("<html")) {
-              errorMsg = "サーバーから予期しない形式のエラーレスポンスが返されました。";
+              errorMsg = "サーバーから予期しない形式のエラーレスポンス（HTML）が返されました。";
+              console.error("Unexpected HTML error response:", text);
             } else {
               // HTMLでなければJSONとして解析を試みる
-              const errData = JSON.parse(trimmed);
+              const errData = JSON.parse(trimmed) as { error?: string };
               if (errData && errData.error) {
                 errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
                 console.error("API Error Details:", errData.error);
@@ -145,8 +149,14 @@ export default function Home() {
             }
           }
         } catch (e) {
-          errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
-          console.error("Error processing response:", e);
+          // JSONパースエラーなど、レスポンス形式に起因するエラーとその他を分類する
+          if (e instanceof SyntaxError) {
+            errorMsg = "サーバーから無効な形式のレスポンス（JSON解析に失敗）が返されました。";
+            console.error("Failed to parse error response as JSON. Raw response text:", trimmed || text);
+          } else {
+            errorMsg = "サーバーのエラーレスポンス処理中に予期しないエラーが発生しました。詳細はコンソールをご確認ください。";
+            console.error("Error processing error response:", e, "Raw response text:", trimmed || text);
+          }
         }
 
         alert(`登録に失敗しました。\n${errorMsg}`);
@@ -473,12 +483,9 @@ export default function Home() {
       {/* 賞味期限入力ドラムロールピッカー */}
       {showExpiryPicker && (
         <DrumRollDatePicker
-          initialDate={expiryDate ? parseLocalDate(expiryDate) : parseLocalDate(getFutureDate(7))}
+          initialDate={expiryDate ? parseLocalDate(expiryDate) : new Date(new Date().setDate(new Date().getDate() + 7))}
           onConfirm={(date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            setExpiryDate(`${year}-${month}-${day}`);
+            setExpiryDate(getLocalDateString(date));
             setShowExpiryPicker(false);
           }}
           onCancel={() => setShowExpiryPicker(false)}

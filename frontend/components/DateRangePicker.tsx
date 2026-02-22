@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DrumRollDatePicker } from "./DrumRollDatePicker";
 import { formatDateForDisplay, getLocalDateString } from "../utils/dateUtils";
 
 interface DateRangePickerProps {
-    startDate: string;
-    endDate: string;
+    startDate?: string;
+    endDate?: string;
     onStartDateChange: (date: string) => void;
     onEndDateChange: (date: string) => void;
     onClose: () => void;
@@ -20,29 +20,36 @@ export function DateRangePicker({
     onClose
 }: DateRangePickerProps) {
     const [localStartDate, setLocalStartDate] = useState(startDate || "");
-    const [localEndDate, setLocalEndDate] = useState(endDate);
+    const [localEndDate, setLocalEndDate] = useState(endDate || "");
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const handleApply = () => {
         if (localStartDate && localEndDate) {
             const start = new Date(localStartDate + "T00:00:00");
             const end = new Date(localEndDate + "T00:00:00");
             if (start > end) {
-                alert("開始日は終了日より前の日付を指定してください。");
-                setLocalStartDate("");
-                setLocalEndDate("");
+                setErrorMessage("開始日は終了日より前の日付を指定してください。");
                 return;
             }
         }
+        setErrorMessage(null);
         onStartDateChange(localStartDate);
         onEndDateChange(localEndDate);
         onClose();
     };
 
-
-
-    const addDaysToStart = (days: number) => {
+    // Escapeキーでモーダルを閉じる
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]); const addDaysToStart = (days: number) => {
         // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
         const baseDate = localStartDate ? new Date(localStartDate + 'T00:00:00') : new Date();
         // 未設定だった場合は、基準日（＝今日）を開始日として反映する
@@ -74,6 +81,13 @@ export function DateRangePicker({
                             ✕
                         </button>
                     </div>
+
+                    {/* エラーメッセージ */}
+                    {errorMessage && (
+                        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-bold animate-fade-in" role="alert">
+                            {errorMessage}
+                        </div>
+                    )}
 
                     {/* いつから */}
                     <div className="mb-4">
