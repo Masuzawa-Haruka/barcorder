@@ -43,12 +43,19 @@ export function DateRangePicker({
     // Escapeキーでモーダルを閉じる
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
+            if (e.key === "Escape") {
+                // ドラムロール日付ピッカー表示中は二重クローズを防ぐため、このハンドラは無効化する
+                if (showStartPicker || showEndPicker) {
+                    return;
+                }
                 onClose();
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-    }, [onClose]);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [onClose, showStartPicker, showEndPicker]);
 
     const addDaysToStart = (days: number) => {
         // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
