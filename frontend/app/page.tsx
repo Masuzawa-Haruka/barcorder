@@ -133,10 +133,11 @@ export default function Home() {
           trimmed = text.trim();
 
           if (trimmed) {
-            const lowerTrimmed = trimmed.toLowerCase();
-
-            // HTMLかどうか先に判定
-            if (lowerTrimmed.startsWith("<!doctype") || lowerTrimmed.startsWith("<html")) {
+            // HTMLかどうか先に判定（大文字・小文字を無視して判定）
+            if (
+              trimmed.toLowerCase().startsWith("<!doctype") ||
+              trimmed.toLowerCase().startsWith("<html")
+            ) {
               errorMsg = "サーバーから予期しない形式のエラーレスポンス（HTML）が返されました。";
               console.error("Unexpected HTML error response:", text);
             } else {

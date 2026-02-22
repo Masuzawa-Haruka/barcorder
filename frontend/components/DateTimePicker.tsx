@@ -22,6 +22,7 @@ export function DateTimePicker({ label = "日時を選択", value, onChange }: D
     const formatDateTime = (dateTimeString: string) => {
         if (!dateTimeString) return "";
         const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return "";
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");

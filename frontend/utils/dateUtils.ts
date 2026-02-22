@@ -35,10 +35,10 @@ export const getLocalDateString = (date: Date): string => {
 /**
  * YYYY-MM-DD形式の文字列を、ローカルタイムゾーンの0時0分を示すDateオブジェクトに安全に変換します。
  * @param dateStr "YYYY-MM-DD" などの日付文字列
- * @returns Dateオブジェクト。不正な文字列の場合は現在日時のDateを返します。
+ * @returns Dateオブジェクト。不正な文字列の場合は Invalid Date を返します。
  */
 export const parseLocalDate = (dateStr: string): Date => {
-    if (!dateStr) return new Date();
+    if (!dateStr) return new Date(NaN);
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         const [year, month, day] = dateStr.split('-');
@@ -46,5 +46,5 @@ export const parseLocalDate = (dateStr: string): Date => {
     }
 
     const date = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`);
-    return isNaN(date.getTime()) ? new Date() : date;
+    return date;
 };
