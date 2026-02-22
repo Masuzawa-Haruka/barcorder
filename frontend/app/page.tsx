@@ -144,7 +144,7 @@ export default function Home() {
               // HTMLでなければJSONとして解析を試みる
               const errData = JSON.parse(trimmed) as { error?: string };
               if (errData && errData.error) {
-                errorMsg = "サーバーでエラーが発生しました。詳細はコンソールをご確認ください。";
+                errorMsg = `原因: ${errData.error}`;
                 console.error("API Error Details:", errData.error);
               }
             }
