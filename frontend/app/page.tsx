@@ -467,6 +467,7 @@ export default function Home() {
             {/* フィルター・ソートエリア */}
             <div className="flex gap-2 mb-2">
               <select
+                aria-label="在庫の絞り込み"
                 value={filterOption}
                 onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
                 className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
@@ -477,6 +478,7 @@ export default function Home() {
               </select>
 
               <select
+                aria-label="在庫の並べ替え"
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
                 className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
@@ -512,7 +514,13 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-              const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0, 0, 0, 0));
+              const itemDate = parseLocalDate(item.expiry_date);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+
+              // NaNの場合は安全にfalseとして扱う
+              const isExpired = !isNaN(itemDate.getTime()) && itemDate < today;
+
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
 
