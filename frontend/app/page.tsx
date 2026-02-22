@@ -5,6 +5,9 @@ import { useState, useEffect, useMemo } from "react";
 import { ProductSearchResult, InventoryItem } from "@/types";
 import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
+import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
 
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -15,7 +18,10 @@ export default function Home() {
   const [inputCode, setInputCode] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
 
-  const [filterOption, setFilterOption] = useState<'all' | 'safe' | 'expired'>('all');
+  const [dateRangeStart, setDateRangeStart] = useState<string>("");
+  const [dateRangeEnd, setDateRangeEnd] = useState<string>("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showExpiryPicker, setShowExpiryPicker] = useState(false);
 
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
@@ -117,7 +123,44 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        alert("登録に失敗しました。もう一度お試しください。");
+        let errorMsg = "もう一度お試しください。";
+        // レスポンス本文を外側の変数に保持して、catch内でも参照できるようにする
+        let text = "";
+        let trimmed = "";
+        try {
+          // res.json() と res.text() の2重読み取りを防ぐため、先にテキストとして取得する
+          text = await res.text();
+          trimmed = text.trim();
+
+          if (trimmed) {
+            // HTMLかどうか先に判定（大文字・小文字を無視して判定）
+            if (
+              trimmed.toLowerCase().startsWith("<!doctype") ||
+              trimmed.toLowerCase().startsWith("<html")
+            ) {
+              errorMsg = "サーバーから予期しない形式のエラーレスポンス（HTML）が返されました。";
+              console.error("Unexpected HTML error response:", text);
+            } else {
+              // HTMLでなければJSONとして解析を試みる
+              const errData = JSON.parse(trimmed) as { error?: string };
+              if (errData && errData.error) {
+                errorMsg = `原因: ${errData.error}`;
+                console.error("API Error Details:", errData.error);
+              }
+            }
+          }
+        } catch (e) {
+          // JSONパースエラーなど、レスポンス形式に起因するエラーとその他を分類する
+          if (e instanceof SyntaxError) {
+            errorMsg = "サーバーから無効な形式のレスポンス（JSON解析に失敗）が返されました。";
+            console.error("Failed to parse error response as JSON. Raw response text:", trimmed || text);
+          } else {
+            errorMsg = "サーバーのエラーレスポンス処理中に予期しないエラーが発生しました。詳細はコンソールをご確認ください。";
+            console.error("Error processing error response:", e, "Raw response text:", trimmed || text);
+          }
+        }
+
+        alert(`登録に失敗しました。\n${errorMsg}`);
         return;
       }
 
@@ -181,19 +224,52 @@ export default function Home() {
       filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 日付範囲でフィルタリング (片方のみの指定も許可)
+    if (dateRangeStart || dateRangeEnd) {
+      let start: Date | null = null;
+      let end: Date | null = null;
 
-    if (filterOption === 'safe') {
-      filtered = filtered.filter(item => new Date(item.expiry_date) >= today);
-    } else if (filterOption === 'expired') {
-      filtered = filtered.filter(item => new Date(item.expiry_date) < today);
+      if (dateRangeStart) {
+        start = new Date(dateRangeStart);
+        if (isNaN(start.getTime())) start = null;
+        else start.setHours(0, 0, 0, 0);
+      }
+
+      if (dateRangeEnd) {
+        end = new Date(dateRangeEnd);
+        if (isNaN(end.getTime())) end = null;
+        else end.setHours(23, 59, 59, 999);
+      }
+
+      if (start && end && start > end) {
+        // 開始日と終了日の大小関係チェック（開始日が終了日より後の場合はフィルタリングを行わない）
+        console.warn("日付範囲が不正なためフィルタリングをスキップします", {
+          start,
+          end,
+        });
+      } else if (start || end) {
+        filtered = filtered.filter(item => {
+          const expiryDate = parseLocalDate(item.expiry_date);
+          if (isNaN(expiryDate.getTime())) {
+            // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
+            console.warn("不正な有効期限のためアイテムを除外しました", {
+              id: item.id,
+              expiry_date: item.expiry_date,
+            });
+            return false;
+          }
+
+          if (start && expiryDate < start) return false;
+          if (end && expiryDate > end) return false;
+          return true;
+        });
+      }
     }
 
     return filtered.sort((a, b) => {
-      return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+      return parseLocalDate(a.expiry_date).getTime() - parseLocalDate(b.expiry_date).getTime();
     });
-  }, [inventorySearch, items, filterOption]);
+  }, [inventorySearch, items, dateRangeStart, dateRangeEnd]);
 
   const currentCandidates = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -275,16 +351,16 @@ export default function Home() {
                     <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
                     <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
                   </div>
-                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
+                  <button
+                    onClick={() => setShowExpiryPicker(true)}
+                    aria-label="賞味期限を選択"
+                    className="w-full flex items-center gap-2 bg-gray-50 p-3 rounded-lg border-2 border-gray-300 hover:border-blue-500 transition-colors"
+                  >
                     <span className="text-xl">📅</span>
-                    <input
-                      type="date"
-                      value={expiryDate}
-                      onChange={(e) => setExpiryDate(e.target.value)}
-                      aria-label="賞味期限を選択"
-                      className="bg-transparent flex-1 outline-none text-gray-700 font-bold"
-                    />
-                  </div>
+                    <span className="flex-1 text-left text-gray-700 font-bold">
+                      {expiryDate ? formatDateForDisplay(expiryDate) : '日付を選択'}
+                    </span>
+                  </button>
                 </div>
 
                 <button onClick={registerItem} className="w-full bg-green-500 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-600">完了 (在庫に追加)</button>
@@ -299,19 +375,50 @@ export default function Home() {
         <div className="p-4 flex flex-col items-center animate-fade-in w-full">
           <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
 
-          <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2 flex flex-col items-end">
-            <input type="text" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="キーワード検索..." className="w-full p-3 border rounded-xl shadow-sm" />
+          <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2">
+            {/* 検索エリア */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* キーワード検索 */}
+              <input
+                type="text"
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+                placeholder="キーワード検索..."
+                className="p-3 border rounded-xl shadow-sm"
+              />
 
-            <select
-              value={filterOption}
-              onChange={(e) => setFilterOption(e.target.value as 'all' | 'safe' | 'expired')}
-              className="w-auto p-2 border rounded-lg bg-white text-sm font-bold text-gray-600 cursor-pointer"
-              aria-label="在庫の表示フィルター"
-            >
-              <option value="all">👁️ すべて表示</option>
-              <option value="safe">✅ 期限内のみ</option>
-              <option value="expired">⚠️ 期限切れのみ</option>
-            </select>
+              {/* 日付範囲検索ボタン */}
+              <button
+                onClick={() => setShowDatePicker(true)}
+                className="p-3 border rounded-xl shadow-sm bg-white hover:bg-blue-50 font-bold text-gray-700 text-sm flex items-center justify-center gap-1"
+              >
+                📅 期限で検索
+                {(dateRangeStart || dateRangeEnd) && (
+                  <span className="text-xs text-blue-600">●</span>
+                )}
+              </button>
+            </div>
+
+            {/* 選択中の日付範囲を表示 */}
+            {(dateRangeStart || dateRangeEnd) && (
+              <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
+                <span>
+                  {dateRangeStart && !dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 以降`}
+                  {!dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeEnd)} 以前`}
+                  {dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 〜 ${formatDateForDisplay(dateRangeEnd)}`}
+                </span>
+                <button
+                  onClick={() => {
+                    setDateRangeStart("");
+                    setDateRangeEnd("");
+                  }}
+                  className="text-red-500 hover:text-red-700 font-bold"
+                  aria-label="日付範囲フィルターを解除"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="w-full max-w-md space-y-3 mt-2">
@@ -362,6 +469,29 @@ export default function Home() {
         <button onClick={() => setActiveTab('add')} className={`flex-1 flex flex-col items-center ${activeTab === 'add' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">🛍️</span><span className="text-[10px] font-bold">追加</span></button>
         <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center ${activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">📦</span><span className="text-[10px] font-bold">在庫</span></button>
       </div>
+
+      {/* 日付範囲ピッカーモーダル */}
+      {showDatePicker && (
+        <DateRangePicker
+          startDate={dateRangeStart}
+          endDate={dateRangeEnd}
+          onStartDateChange={setDateRangeStart}
+          onEndDateChange={setDateRangeEnd}
+          onClose={() => setShowDatePicker(false)}
+        />
+      )}
+
+      {/* 賞味期限入力ドラムロールピッカー */}
+      {showExpiryPicker && (
+        <DrumRollDatePicker
+          initialDate={expiryDate ? parseLocalDate(expiryDate) : parseLocalDate(getFutureDate(7))}
+          onConfirm={(date) => {
+            setExpiryDate(getLocalDateString(date));
+            setShowExpiryPicker(false);
+          }}
+          onCancel={() => setShowExpiryPicker(false)}
+        />
+      )}
     </main>
   );
 }
