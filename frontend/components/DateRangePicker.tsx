@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { DrumRollDatePicker } from "./DrumRollDatePicker";
-import { formatDateForDisplay, getLocalDateString } from "../utils/dateUtils";
+import { formatDateForDisplay, getLocalDateString, parseLocalDate } from "../utils/dateUtils";
 
 interface DateRangePickerProps {
     startDate?: string;
@@ -27,8 +27,8 @@ export function DateRangePicker({
 
     const handleApply = () => {
         if (localStartDate && localEndDate) {
-            const start = new Date(localStartDate + "T00:00:00");
-            const end = new Date(localEndDate + "T00:00:00");
+            const start = parseLocalDate(localStartDate);
+            const end = parseLocalDate(localEndDate);
             if (start > end) {
                 setErrorMessage("開始日は終了日より前の日付を指定してください。");
                 return;
@@ -48,10 +48,11 @@ export function DateRangePicker({
             }
         };
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onClose]); const addDaysToStart = (days: number) => {
+    }, [onClose]);
+
+    const addDaysToStart = (days: number) => {
         // localStartDate が未設定の場合でも、クイック設定が動作するように現在日付を基準とする
-        const baseDate = localStartDate ? new Date(localStartDate + 'T00:00:00') : new Date();
+        const baseDate = localStartDate ? parseLocalDate(localStartDate) : new Date();
         // 未設定だった場合は、基準日（＝今日）を開始日として反映する
         if (!localStartDate) {
             setLocalStartDate(getLocalDateString(baseDate));
@@ -158,7 +159,7 @@ export function DateRangePicker({
             {/* ドラムロールピッカー - いつから */}
             {showStartPicker && (
                 <DrumRollDatePicker
-                    initialDate={localStartDate ? new Date(localStartDate + 'T00:00:00') : new Date()}
+                    initialDate={localStartDate ? parseLocalDate(localStartDate) : new Date()}
                     onConfirm={(date) => {
                         setLocalStartDate(getLocalDateString(date));
                         setShowStartPicker(false);
@@ -170,7 +171,7 @@ export function DateRangePicker({
             {/* ドラムロールピッカー - いつまで */}
             {showEndPicker && (
                 <DrumRollDatePicker
-                    initialDate={localEndDate ? new Date(localEndDate + 'T00:00:00') : new Date()}
+                    initialDate={localEndDate ? parseLocalDate(localEndDate) : new Date()}
                     onConfirm={(date) => {
                         setLocalEndDate(getLocalDateString(date));
                         setShowEndPicker(false);

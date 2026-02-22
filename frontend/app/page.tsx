@@ -484,7 +484,7 @@ export default function Home() {
       {/* 賞味期限入力ドラムロールピッカー */}
       {showExpiryPicker && (
         <DrumRollDatePicker
-          initialDate={expiryDate ? parseLocalDate(expiryDate) : new Date(new Date().setDate(new Date().getDate() + 7))}
+          initialDate={expiryDate ? parseLocalDate(expiryDate) : parseLocalDate(getFutureDate(7))}
           onConfirm={(date) => {
             setExpiryDate(getLocalDateString(date));
             setShowExpiryPicker(false);
