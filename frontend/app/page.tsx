@@ -277,11 +277,25 @@ export default function Home() {
     if (filterOption === 'expired') {
       filtered = filtered.filter(item => {
         const expiryDate = parseLocalDate(item.expiry_date);
+        if (isNaN(expiryDate.getTime())) {
+          console.warn("不正な有効期限のためアイテムを期限切れフィルターから除外しました", {
+            id: item.id,
+            expiry_date: item.expiry_date,
+          });
+          return false;
+        }
         return expiryDate < today;
       });
     } else if (filterOption === 'unexpired') {
       filtered = filtered.filter(item => {
         const expiryDate = parseLocalDate(item.expiry_date);
+        if (isNaN(expiryDate.getTime())) {
+          console.warn("不正な有効期限のためアイテムを期限内フィルターから除外しました", {
+            id: item.id,
+            expiry_date: item.expiry_date,
+          });
+          return false;
+        }
         return expiryDate >= today;
       });
     }
@@ -291,12 +305,30 @@ export default function Home() {
       if (sortOption === 'expiry_asc') {
         const dateA = parseLocalDate(a.expiry_date).getTime();
         const dateB = parseLocalDate(b.expiry_date).getTime();
-        // NaNの場合は後ろに持っていくなどのフォールバックがあると安全ですが、要件通り基本は昇順
+        const isInvalidA = isNaN(dateA);
+        const isInvalidB = isNaN(dateB);
+        if (isInvalidA && isInvalidB) return 0;
+        if (isInvalidA) return 1; // 不正な日付は後ろへ
+        if (isInvalidB) return -1;
         return dateA - dateB;
       } else if (sortOption === 'created_desc') {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        const isInvalidA = isNaN(timeA);
+        const isInvalidB = isNaN(timeB);
+        if (isInvalidA && isInvalidB) return 0;
+        if (isInvalidA) return 1;
+        if (isInvalidB) return -1;
+        return timeB - timeA;
       } else if (sortOption === 'created_asc') {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        const isInvalidA = isNaN(timeA);
+        const isInvalidB = isNaN(timeB);
+        if (isInvalidA && isInvalidB) return 0;
+        if (isInvalidA) return 1;
+        if (isInvalidB) return -1;
+        return timeA - timeB;
       } else if (sortOption === 'name_asc') {
         return a.name.localeCompare(b.name, 'ja');
       }
