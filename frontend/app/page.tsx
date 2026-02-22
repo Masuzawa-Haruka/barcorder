@@ -23,6 +23,10 @@ export default function Home() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showExpiryPicker, setShowExpiryPicker] = useState(false);
 
+  // Filter & Sort State
+  const [filterOption, setFilterOption] = useState<'all' | 'expired' | 'unexpired'>('all');
+  const [sortOption, setSortOption] = useState<'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc'>('expiry_asc');
+
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
 
@@ -266,10 +270,39 @@ export default function Home() {
       }
     }
 
+    // 絞り込み (フィルター)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (filterOption === 'expired') {
+      filtered = filtered.filter(item => {
+        const expiryDate = parseLocalDate(item.expiry_date);
+        return expiryDate < today;
+      });
+    } else if (filterOption === 'unexpired') {
+      filtered = filtered.filter(item => {
+        const expiryDate = parseLocalDate(item.expiry_date);
+        return expiryDate >= today;
+      });
+    }
+
+    // 並べ替え (ソート)
     return filtered.sort((a, b) => {
-      return parseLocalDate(a.expiry_date).getTime() - parseLocalDate(b.expiry_date).getTime();
+      if (sortOption === 'expiry_asc') {
+        const dateA = parseLocalDate(a.expiry_date).getTime();
+        const dateB = parseLocalDate(b.expiry_date).getTime();
+        // NaNの場合は後ろに持っていくなどのフォールバックがあると安全ですが、要件通り基本は昇順
+        return dateA - dateB;
+      } else if (sortOption === 'created_desc') {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      } else if (sortOption === 'created_asc') {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (sortOption === 'name_asc') {
+        return a.name.localeCompare(b.name, 'ja');
+      }
+      return 0; // default (発生しないはず)
     });
-  }, [inventorySearch, items, dateRangeStart, dateRangeEnd]);
+  }, [inventorySearch, items, dateRangeStart, dateRangeEnd, filterOption, sortOption]);
 
   const currentCandidates = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -397,6 +430,30 @@ export default function Home() {
                   <span className="text-xs text-blue-600">●</span>
                 )}
               </button>
+            </div>
+
+            {/* フィルター・ソートエリア */}
+            <div className="flex gap-2 mb-2">
+              <select
+                value={filterOption}
+                onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
+                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold outline-none"
+              >
+                <option value="all">すべて表示</option>
+                <option value="expired">期限切れのみ</option>
+                <option value="unexpired">期限内のみ</option>
+              </select>
+
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
+                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold outline-none"
+              >
+                <option value="expiry_asc">期限が近い順</option>
+                <option value="created_desc">登録が新しい順</option>
+                <option value="created_asc">登録が古い順</option>
+                <option value="name_asc">名前順 (あいうえお順)</option>
+              </select>
             </div>
 
             {/* 選択中の日付範囲を表示 */}
