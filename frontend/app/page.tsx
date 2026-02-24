@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { ProductSearchResult, InventoryItem } from "@/types";
 import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
@@ -43,14 +43,14 @@ export default function Home() {
     return date.toISOString().split('T')[0];
   };
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/items`);
       if (res.ok) setItems(await res.json());
     } catch (err) { console.error(err); }
-  };
+  }, [API_URL]);
 
-  useEffect(() => { refreshData(); }, [activeTab]);
+  useEffect(() => { refreshData(); }, [activeTab, refreshData]);
 
   useEffect(() => {
     if (selectedProduct) {
@@ -104,7 +104,7 @@ export default function Home() {
       const result = await html5QrCode.scanFileV2(file, true);
       if (result && result.decodedText) searchProduct(result.decodedText);
       else alert("バーコードを検出できませんでした");
-    } catch (err) { alert("読み取り失敗"); }
+    } catch { alert("読み取り失敗"); }
     finally { setLoading(false); e.target.value = ""; }
   };
 
@@ -222,7 +222,14 @@ export default function Home() {
   };
 
   const displayItems = useMemo(() => {
-    let filtered = items.filter(item => item.status === 'active');
+    // 1. 日付のパース関連処理を一度だけ行い、パース済みのプロパティを付与する (Copilot 警告対応・計算量削減)
+    let filtered = items
+      .filter(item => item.status === 'active')
+      .map(item => ({
+        ...item,
+        _expiryTime: parseLocalDate(item.expiry_date).getTime(),
+        _createdTime: new Date(item.created_at).getTime()
+      }));
 
     if (inventorySearch) {
       filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
@@ -253,8 +260,7 @@ export default function Home() {
         });
       } else if (start || end) {
         filtered = filtered.filter(item => {
-          const expiryDate = parseLocalDate(item.expiry_date);
-          if (isNaN(expiryDate.getTime())) {
+          if (isNaN(item._expiryTime)) {
             // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
             console.warn("不正な有効期限のためアイテムを除外しました", {
               id: item.id,
@@ -263,48 +269,45 @@ export default function Home() {
             return false;
           }
 
-          if (start && expiryDate < start) return false;
-          if (end && expiryDate > end) return false;
+          if (start && item._expiryTime < start.getTime()) return false;
+          if (end && item._expiryTime > end.getTime()) return false;
           return true;
         });
       }
     }
 
     // 絞り込み (フィルター)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayTime = new Date().setHours(0, 0, 0, 0);
 
     if (filterOption === 'expired') {
       filtered = filtered.filter(item => {
-        const expiryDate = parseLocalDate(item.expiry_date);
-        if (isNaN(expiryDate.getTime())) {
+        if (isNaN(item._expiryTime)) {
           console.warn("不正な有効期限のためアイテムを期限切れフィルターから除外しました", {
             id: item.id,
             expiry_date: item.expiry_date,
           });
           return false;
         }
-        return expiryDate < today;
+        return item._expiryTime < todayTime;
       });
     } else if (filterOption === 'unexpired') {
       filtered = filtered.filter(item => {
-        const expiryDate = parseLocalDate(item.expiry_date);
-        if (isNaN(expiryDate.getTime())) {
+        if (isNaN(item._expiryTime)) {
           console.warn("不正な有効期限のためアイテムを期限内フィルターから除外しました", {
             id: item.id,
             expiry_date: item.expiry_date,
           });
           return false;
         }
-        return expiryDate >= today;
+        return item._expiryTime >= todayTime;
       });
     }
 
     // 並べ替え (ソート)
     return filtered.sort((a, b) => {
       if (sortOption === 'expiry_asc') {
-        const dateA = parseLocalDate(a.expiry_date).getTime();
-        const dateB = parseLocalDate(b.expiry_date).getTime();
+        const dateA = a._expiryTime;
+        const dateB = b._expiryTime;
         const isInvalidA = isNaN(dateA);
         const isInvalidB = isNaN(dateB);
         if (isInvalidA && isInvalidB) return 0;
@@ -312,8 +315,8 @@ export default function Home() {
         if (isInvalidB) return -1;
         return dateA - dateB;
       } else if (sortOption === 'created_desc') {
-        const timeA = new Date(a.created_at).getTime();
-        const timeB = new Date(b.created_at).getTime();
+        const timeA = a._createdTime;
+        const timeB = b._createdTime;
         const isInvalidA = isNaN(timeA);
         const isInvalidB = isNaN(timeB);
         if (isInvalidA && isInvalidB) return 0;
@@ -321,8 +324,8 @@ export default function Home() {
         if (isInvalidB) return -1;
         return timeB - timeA;
       } else if (sortOption === 'created_asc') {
-        const timeA = new Date(a.created_at).getTime();
-        const timeB = new Date(b.created_at).getTime();
+        const timeA = a._createdTime;
+        const timeB = b._createdTime;
         const isInvalidA = isNaN(timeA);
         const isInvalidB = isNaN(timeB);
         if (isInvalidA && isInvalidB) return 0;
