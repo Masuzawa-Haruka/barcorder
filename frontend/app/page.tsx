@@ -351,6 +351,14 @@ export default function Home() {
 
   return (
     <main className="flex flex-col min-h-screen bg-gray-50 pb-24">
+      {/* Header */}
+      <header className="w-full bg-[#333333] shadow-md flex items-center px-4 py-3 sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <img src="/icon.png" alt="Scan & Track Logo" className="w-auto h-8 object-contain" />
+          <span className="font-bold text-lg text-white tracking-wide">SCAN & TRACK</span>
+        </div>
+      </header>
+
       <div id="reader-hidden" className="hidden"></div>
 
       {/* TAB 1: 追加 */}
