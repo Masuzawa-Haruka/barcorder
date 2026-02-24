@@ -1,13 +1,18 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { ProductSearchResult, InventoryItem } from "@/types";
 import { Html5Qrcode } from "html5-qrcode";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
+
+type InventoryItemWithParsedDates = InventoryItem & {
+  _expiryTime: number;
+  _createdTime: number;
+};
 
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -22,6 +27,10 @@ export default function Home() {
   const [dateRangeEnd, setDateRangeEnd] = useState<string>("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showExpiryPicker, setShowExpiryPicker] = useState(false);
+
+  // Filter & Sort State
+  const [filterOption, setFilterOption] = useState<'all' | 'expired' | 'unexpired'>('all');
+  const [sortOption, setSortOption] = useState<'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc'>('expiry_asc');
 
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
@@ -39,14 +48,14 @@ export default function Home() {
     return date.toISOString().split('T')[0];
   };
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/items`);
       if (res.ok) setItems(await res.json());
     } catch (err) { console.error(err); }
-  };
+  }, [API_URL]);
 
-  useEffect(() => { refreshData(); }, [activeTab]);
+  useEffect(() => { refreshData(); }, [activeTab, refreshData]);
 
   useEffect(() => {
     if (selectedProduct) {
@@ -100,7 +109,7 @@ export default function Home() {
       const result = await html5QrCode.scanFileV2(file, true);
       if (result && result.decodedText) searchProduct(result.decodedText);
       else alert("バーコードを検出できませんでした");
-    } catch (err) { alert("読み取り失敗"); }
+    } catch { alert("読み取り失敗"); }
     finally { setLoading(false); e.target.value = ""; }
   };
 
@@ -218,7 +227,24 @@ export default function Home() {
   };
 
   const displayItems = useMemo(() => {
-    let filtered = items.filter(item => item.status === 'active');
+    // 1. 日付のパース関連処理を一度だけ行い、パース済みのプロパティを付与する (Copilot 警告対応・計算量削減)
+    let filtered: InventoryItemWithParsedDates[] = items
+      .filter(item => item.status === 'active')
+      .map(item => ({
+        ...item,
+        _expiryTime: parseLocalDate(item.expiry_date).getTime(),
+        _createdTime: new Date(item.created_at).getTime()
+      }));
+
+    // 本日の0時を表すタイムスタンプ (全フィルター・ソートで共通利用)
+    const todayTime = new Date().setHours(0, 0, 0, 0);
+
+    const warnInvalidDate = (item: InventoryItemWithParsedDates, context: string) => {
+      console.warn(`不正な有効期限のためアイテムを${context}から除外しました`, {
+        id: item.id,
+        expiry_date: item.expiry_date,
+      });
+    };
 
     if (inventorySearch) {
       filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
@@ -249,27 +275,72 @@ export default function Home() {
         });
       } else if (start || end) {
         filtered = filtered.filter(item => {
-          const expiryDate = parseLocalDate(item.expiry_date);
-          if (isNaN(expiryDate.getTime())) {
-            // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
-            console.warn("不正な有効期限のためアイテムを除外しました", {
-              id: item.id,
-              expiry_date: item.expiry_date,
-            });
+          if (isNaN(item._expiryTime)) {
+            warnInvalidDate(item, "日付範囲検索");
             return false;
           }
 
-          if (start && expiryDate < start) return false;
-          if (end && expiryDate > end) return false;
+          if (start && item._expiryTime < start.getTime()) return false;
+          if (end && item._expiryTime > end.getTime()) return false;
           return true;
         });
       }
     }
 
+    // 絞り込み (フィルター)
+    if (filterOption === 'expired') {
+      filtered = filtered.filter(item => {
+        if (isNaN(item._expiryTime)) {
+          warnInvalidDate(item, "期限切れフィルター");
+          return false;
+        }
+        return item._expiryTime < todayTime;
+      });
+    } else if (filterOption === 'unexpired') {
+      filtered = filtered.filter(item => {
+        if (isNaN(item._expiryTime)) {
+          warnInvalidDate(item, "期限内フィルター");
+          return false;
+        }
+        return item._expiryTime >= todayTime;
+      });
+    }
+
+    // 並べ替え (ソート)
     return filtered.sort((a, b) => {
-      return parseLocalDate(a.expiry_date).getTime() - parseLocalDate(b.expiry_date).getTime();
+      if (sortOption === 'expiry_asc') {
+        const dateA = a._expiryTime;
+        const dateB = b._expiryTime;
+        const isInvalidA = isNaN(dateA);
+        const isInvalidB = isNaN(dateB);
+        if (isInvalidA && isInvalidB) return 0;
+        if (isInvalidA) return 1; // 不正な日付は後ろへ
+        if (isInvalidB) return -1;
+        return dateA - dateB;
+      } else if (sortOption === 'created_desc') {
+        const timeA = a._createdTime;
+        const timeB = b._createdTime;
+        const isInvalidA = isNaN(timeA);
+        const isInvalidB = isNaN(timeB);
+        if (isInvalidA && isInvalidB) return 0;
+        if (isInvalidA) return 1;
+        if (isInvalidB) return -1;
+        return timeB - timeA;
+      } else if (sortOption === 'created_asc') {
+        const timeA = a._createdTime;
+        const timeB = b._createdTime;
+        const isInvalidA = isNaN(timeA);
+        const isInvalidB = isNaN(timeB);
+        if (isInvalidA && isInvalidB) return 0;
+        if (isInvalidA) return 1;
+        if (isInvalidB) return -1;
+        return timeA - timeB;
+      } else if (sortOption === 'name_asc') {
+        return a.name.localeCompare(b.name, 'ja');
+      }
+      return 0; // default (発生しないはず)
     });
-  }, [inventorySearch, items, dateRangeStart, dateRangeEnd]);
+  }, [inventorySearch, items, dateRangeStart, dateRangeEnd, filterOption, sortOption]);
 
   const currentCandidates = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -399,6 +470,32 @@ export default function Home() {
               </button>
             </div>
 
+            {/* フィルター・ソートエリア */}
+            <div className="flex gap-2 mb-2">
+              <select
+                aria-label="在庫の絞り込み"
+                value={filterOption}
+                onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
+                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+              >
+                <option value="all">すべて表示</option>
+                <option value="expired">期限切れのみ</option>
+                <option value="unexpired">期限内のみ</option>
+              </select>
+
+              <select
+                aria-label="在庫の並べ替え"
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
+                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+              >
+                <option value="expiry_asc">期限が近い順</option>
+                <option value="created_desc">登録が新しい順</option>
+                <option value="created_asc">登録が古い順</option>
+                <option value="name_asc">名前順 (あいうえお順)</option>
+              </select>
+            </div>
+
             {/* 選択中の日付範囲を表示 */}
             {(dateRangeStart || dateRangeEnd) && (
               <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
@@ -423,7 +520,10 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-              const isExpired = new Date(item.expiry_date) < new Date(new Date().setHours(0, 0, 0, 0));
+              // NaNの場合は安全にfalseとして扱う
+              const todayTime = new Date().setHours(0, 0, 0, 0);
+              const isExpired = !isNaN(item._expiryTime) && item._expiryTime < todayTime;
+
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
 
