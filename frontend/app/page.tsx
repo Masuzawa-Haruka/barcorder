@@ -9,6 +9,11 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
 
+type InventoryItemWithParsedDates = InventoryItem & {
+  _expiryTime: number;
+  _createdTime: number;
+};
+
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -223,13 +228,23 @@ export default function Home() {
 
   const displayItems = useMemo(() => {
     // 1. 日付のパース関連処理を一度だけ行い、パース済みのプロパティを付与する (Copilot 警告対応・計算量削減)
-    let filtered = items
+    let filtered: InventoryItemWithParsedDates[] = items
       .filter(item => item.status === 'active')
       .map(item => ({
         ...item,
         _expiryTime: parseLocalDate(item.expiry_date).getTime(),
         _createdTime: new Date(item.created_at).getTime()
       }));
+
+    // 本日の0時を表すタイムスタンプ (全フィルター・ソートで共通利用)
+    const todayTime = new Date().setHours(0, 0, 0, 0);
+
+    const warnInvalidDate = (item: InventoryItemWithParsedDates, context: string) => {
+      console.warn(`不正な有効期限のためアイテムを${context}から除外しました`, {
+        id: item.id,
+        expiry_date: item.expiry_date,
+      });
+    };
 
     if (inventorySearch) {
       filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
@@ -261,11 +276,7 @@ export default function Home() {
       } else if (start || end) {
         filtered = filtered.filter(item => {
           if (isNaN(item._expiryTime)) {
-            // 不正な有効期限の日付を持つアイテムは一覧表示から除外する（データ不整合検知のため警告を出力）
-            console.warn("不正な有効期限のためアイテムを除外しました", {
-              id: item.id,
-              expiry_date: item.expiry_date,
-            });
+            warnInvalidDate(item, "日付範囲検索");
             return false;
           }
 
@@ -277,15 +288,10 @@ export default function Home() {
     }
 
     // 絞り込み (フィルター)
-    const todayTime = new Date().setHours(0, 0, 0, 0);
-
     if (filterOption === 'expired') {
       filtered = filtered.filter(item => {
         if (isNaN(item._expiryTime)) {
-          console.warn("不正な有効期限のためアイテムを期限切れフィルターから除外しました", {
-            id: item.id,
-            expiry_date: item.expiry_date,
-          });
+          warnInvalidDate(item, "期限切れフィルター");
           return false;
         }
         return item._expiryTime < todayTime;
@@ -293,10 +299,7 @@ export default function Home() {
     } else if (filterOption === 'unexpired') {
       filtered = filtered.filter(item => {
         if (isNaN(item._expiryTime)) {
-          console.warn("不正な有効期限のためアイテムを期限内フィルターから除外しました", {
-            id: item.id,
-            expiry_date: item.expiry_date,
-          });
+          warnInvalidDate(item, "期限内フィルター");
           return false;
         }
         return item._expiryTime >= todayTime;
@@ -517,12 +520,9 @@ export default function Home() {
 
           <div className="w-full max-w-md space-y-3 mt-2">
             {displayItems.map((item) => {
-              const itemDate = parseLocalDate(item.expiry_date);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-
               // NaNの場合は安全にfalseとして扱う
-              const isExpired = !isNaN(itemDate.getTime()) && itemDate < today;
+              const todayTime = new Date().setHours(0, 0, 0, 0);
+              const isExpired = !isNaN(item._expiryTime) && item._expiryTime < todayTime;
 
               let cardClass = "bg-white border-gray-200";
               if (isExpired) cardClass = "bg-red-50 border-red-300";
