@@ -8,6 +8,7 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
+import Image from 'next/image';
 
 type InventoryItemWithParsedDates = InventoryItem & {
   _expiryTime: number;
@@ -350,7 +351,18 @@ export default function Home() {
   const totalPages = Math.ceil(candidates.length / itemsPerPage);
 
   return (
-    <main className="flex flex-col min-h-screen bg-gray-50 pb-24">
+    <main className="flex flex-col min-h-screen bg-gray-50 pt-16 pb-24">
+      <header className="w-full shadow-md flex items-center px-4 py-2 sticky top-0 z-30 bg-white">
+        <Image
+          src="/icon.png"
+          alt="Scan & Track Logo"
+          width={48}
+          height={48}
+          className="w-auto h-12 object-contain"
+          priority
+        />
+      </header>
+
       <div id="reader-hidden" className="hidden"></div>
 
       {/* TAB 1: 追加 */}
