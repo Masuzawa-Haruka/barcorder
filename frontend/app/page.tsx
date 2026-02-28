@@ -16,11 +16,21 @@ type InventoryItemWithParsedDates = InventoryItem & {
   _createdTime: number;
 };
 
+type DashboardRefrigeratorSummary = {
+  id: string;
+  name: string;
+};
+
+type DashboardMembership = {
+  role: string;
+  refrigerators: DashboardRefrigeratorSummary;
+};
+
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const supabase = createClient();
-  const [memberships, setMemberships] = useState<any[]>([]);
+  const [memberships, setMemberships] = useState<DashboardMembership[]>([]);
   const [currentRefrigeratorId, setCurrentRefrigeratorId] = useState<string>("");
   const [newRefName, setNewRefName] = useState("");
 
@@ -200,7 +210,7 @@ export default function Home() {
           barcode: selectedProduct.code || "unknown",
           image: selectedProduct.image,
           expiry_date: finalDate,
-          category: (selectedProduct as any).categories || '未分類'
+          category: selectedProduct.categories || '未分類'
         }),
       });
 

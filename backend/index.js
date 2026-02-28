@@ -7,11 +7,18 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const port = 3001;
 
+class AuthError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'AuthError';
+    }
+}
+
 // JWTトークンを含むリクエストごとのSupabaseクライアントを作成するヘルパー関数
 const getAuthClient = (req) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-        throw new Error('Authorization header is missing');
+        throw new AuthError('Authorization header is missing');
     }
     return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
         global: {
@@ -122,6 +129,7 @@ app.get('/api/dashboard', async (req, res) => {
         if (error) return res.status(500).json({ error: error.message });
         res.json(data);
     } catch (e) {
+        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
         console.error('GET /api/dashboard エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -143,35 +151,25 @@ app.post('/api/refrigerators', async (req, res) => {
             return res.status(401).json({ error: '認証エラー' });
         }
 
-        // 1. refrigerators テーブルにインサート（RLSで認証が必要）
-        const { data: refData, error: refError } = await authSupabase
-            .from('refrigerators')
-            .insert([{ name }])
-            .select()
-            .single();
+        // 冷蔵庫作成とオーナー登録をDB側トランザクション（RPC）で一括実行する
+        const { data: refId, error: rpcError } = await authSupabase.rpc(
+            'create_refrigerator_with_owner',
+            { p_name: name }
+        );
 
-        if (refError) {
-            console.error('refError:', refError);
-            return res.status(500).json({ error: `冷蔵庫データの登録でDBエラー: ${refError.message}` });
+        if (rpcError) {
+            console.error('create_refrigerator_with_owner RPC error:', rpcError);
+            return res.status(500).json({ error: `冷蔵庫作成処理でDBエラー: ${rpcError.message}` });
         }
 
-        // 2. refrigerator_members にオーナー権限で追加
-        const { error: memberError } = await authSupabase
-            .from('refrigerator_members')
-            .insert([{
-                refrigerator_id: refData.id,
-                user_id: user.id,
-                role: 'owner'
-            }]);
-
-        if (memberError) {
-            console.error('memberError:', memberError);
-            // ロールバックできないため、警告を含める
-            return res.status(500).json({ error: `メンバーデータの登録でDBエラー: ${memberError.message}` });
+        if (!refId) {
+            console.error('create_refrigerator_with_owner RPC returned no data');
+            return res.status(500).json({ error: '冷蔵庫作成処理で予期せぬエラーが発生しました。' });
         }
 
-        res.status(201).json(refData);
+        res.status(201).json({ id: refId, name });
     } catch (e) {
+        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
         console.error('POST /api/refrigerators エラー:', e);
         res.status(500).json({ error: 'サーバー内で予期せぬエラーが発生しました。' });
     }
@@ -219,6 +217,7 @@ app.get('/api/items', async (req, res) => {
 
         res.json(formattedData);
     } catch (e) {
+        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
         console.error('GET /api/items エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -276,6 +275,7 @@ app.post('/api/items', async (req, res) => {
         }
         res.status(201).json(data[0]);
     } catch (e) {
+        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
         console.error('POST /api/items エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -315,6 +315,7 @@ app.patch('/api/items/:id', async (req, res) => {
 
         res.json(data[0]);
     } catch (e) {
+        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
         console.error('PATCH /api/items/:id エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -337,6 +338,7 @@ app.delete('/api/items/:id', async (req, res) => {
         if (error) return res.status(500).json({ error: error.message });
         res.status(204).send();
     } catch (e) {
+        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
         console.error('DELETE /api/items/:id エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }

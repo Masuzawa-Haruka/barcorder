@@ -8,6 +8,7 @@ export type ProductSearchResult = {
   image: string;     // 画像URL
   url?: string;      // 商品ページURL
   code?: string;     // JANコード
+  categories?: string; // カテゴリ
 };
 
 // 2. データベース(Supabase)に保存される在庫データの型

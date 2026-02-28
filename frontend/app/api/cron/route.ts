@@ -8,11 +8,21 @@ export async function GET(request: Request) {
     // 1. Cron Jobの認証（不正アクセスの防止）
     // Vercel Cronはリクエストヘッダーに `Authorization: Bearer <CRON_SECRET>` を付与する
     const authHeader = request.headers.get('authorization');
-    if (
-        process.env.CRON_SECRET &&
-        authHeader !== `Bearer ${process.env.CRON_SECRET}`
-    ) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (!cronSecret) {
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('[cron] CRON_SECRET が未設定ですが、NODE_ENV=development のため認証チェックをスキップします。');
+        } else {
+            return NextResponse.json(
+                { error: 'CRON_SECRET が未設定のためバッチ処理を実行できません。' },
+                { status: 500 }
+            );
+        }
+    } else {
+        if (authHeader !== `Bearer ${cronSecret}`) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
     }
 
     try {
