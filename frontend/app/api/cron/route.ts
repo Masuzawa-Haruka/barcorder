@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         }
     } else {
         if (authHeader !== `Bearer ${cronSecret}`) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 });
         }
     }
 

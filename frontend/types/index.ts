@@ -15,10 +15,11 @@ export type ProductSearchResult = {
 // 画面での「在庫一覧」表示に使います
 export type InventoryItem = {
   id: string;        // UUID (Supabaseが生成)
-  user_id: string;   // 所有者のID
+  refrigerator_id: string; // 所属する冷蔵庫のID
   name: string;      // 商品名
-  barcode: string;   // JANコード
+  barcode: string;   // JANコード (またはカスタムID)
   image_url: string | null; // 画像がない場合もあるので null 許容
+  category?: string;        // カテゴリ名
   expiry_date: string;      // 賞味期限 (YYYY-MM-DD)
   status: 'active' | 'consumed' | 'discarded'; // ステータスは文字列リテラル型で制限する
   created_at: string;       // 登録日

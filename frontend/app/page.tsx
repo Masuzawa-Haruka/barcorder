@@ -206,7 +206,7 @@ export default function Home() {
         body: JSON.stringify({
           refrigerator_id: currentRefrigeratorId,
           name: selectedProduct.name,
-          barcode: selectedProduct.code || "unknown",
+          barcode: selectedProduct.code || `custom-${Date.now()}`,
           image: selectedProduct.image,
           expiry_date: finalDate,
           category: selectedProduct.categories || '未分類'

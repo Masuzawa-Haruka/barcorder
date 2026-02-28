@@ -188,7 +188,7 @@ app.get('/api/items', async (req, res) => {
     try {
         const authSupabase = getAuthClient(req);
 
-        const { data, error } = await authSupabase
+        const { data, error, status } = await authSupabase
             .from('inventory_items')
             .select(`
                 *,
@@ -201,7 +201,7 @@ app.get('/api/items', async (req, res) => {
             .eq('refrigerator_id', refrigerator_id)
             .order('expiration_date', { ascending: true });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return res.status(status || 500).json({ error: error.message });
 
         // フロントエンドのUIに合わせた形式に整形する
         const formattedData = data.map(item => ({
@@ -295,7 +295,7 @@ app.patch('/api/items/:id', async (req, res) => {
 
     if (Object.keys(updateFields).length === 0) {
         return res.status(400).json({
-            error: '更新対象フィールドが指定されていません。'
+            error: '更新対象フィールドが指定されていません。更新可能なフィールド（status, expiry_date）のいずれかを指定してください。'
         });
     }
 
