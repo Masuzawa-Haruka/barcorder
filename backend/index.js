@@ -128,6 +128,56 @@ app.get('/api/dashboard', async (req, res) => {
 });
 
 // ---------------------------------------------------
+// 2.5 冷蔵庫作成API
+// ---------------------------------------------------
+app.post('/api/refrigerators', async (req, res) => {
+    const { name } = req.body;
+    if (!name || name.trim() === '') {
+        return res.status(400).json({ error: '冷蔵庫名は必須です' });
+    }
+
+    try {
+        const authSupabase = getAuthClient(req);
+        const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+        if (authError || !user) {
+            return res.status(401).json({ error: '認証エラー' });
+        }
+
+        // 1. refrigerators テーブルにインサート（RLSで認証が必要）
+        const { data: refData, error: refError } = await authSupabase
+            .from('refrigerators')
+            .insert([{ name }])
+            .select()
+            .single();
+
+        if (refError) {
+            console.error('refError:', refError);
+            return res.status(500).json({ error: `冷蔵庫データの登録でDBエラー: ${refError.message}` });
+        }
+
+        // 2. refrigerator_members にオーナー権限で追加
+        const { error: memberError } = await authSupabase
+            .from('refrigerator_members')
+            .insert([{
+                refrigerator_id: refData.id,
+                user_id: user.id,
+                role: 'owner'
+            }]);
+
+        if (memberError) {
+            console.error('memberError:', memberError);
+            // ロールバックできないため、警告を含める
+            return res.status(500).json({ error: `メンバーデータの登録でDBエラー: ${memberError.message}` });
+        }
+
+        res.status(201).json(refData);
+    } catch (e) {
+        console.error('POST /api/refrigerators エラー:', e);
+        res.status(500).json({ error: 'サーバー内で予期せぬエラーが発生しました。' });
+    }
+});
+
+// ---------------------------------------------------
 // 3. 在庫一覧取得API (`inventory_items` -> `products_master`)
 // ---------------------------------------------------
 app.get('/api/items', async (req, res) => {
