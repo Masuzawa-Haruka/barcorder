@@ -153,7 +153,7 @@ export async function GET(request: Request) {
             message: `${Object.keys(notificationsByUser).length}人のユーザーにリマインダーを送信しました。`
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Cron Job Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }

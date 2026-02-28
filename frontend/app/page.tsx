@@ -29,7 +29,7 @@ type DashboardMembership = {
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [memberships, setMemberships] = useState<DashboardMembership[] | null>(null);
   const [currentRefrigeratorId, setCurrentRefrigeratorId] = useState<string>("");
   const [newRefName, setNewRefName] = useState("");
@@ -92,8 +92,7 @@ export default function Home() {
         setItems([]);
       }
     } catch (err) { console.error(err); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [API_URL, currentRefrigeratorId]);
+  }, [API_URL, currentRefrigeratorId, supabase]);
 
   useEffect(() => { refreshData(); }, [activeTab, currentRefrigeratorId, refreshData]);
 
@@ -200,7 +199,7 @@ export default function Home() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
 
       const res = await fetch(`${API_URL}/api/items`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeader },
@@ -272,7 +271,7 @@ export default function Home() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
 
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
       const res = await fetch(`${API_URL}/api/items/${id}`, {
@@ -296,7 +295,7 @@ export default function Home() {
     if (!newDate) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
 
       const res = await fetch(`${API_URL}/api/items/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json", ...authHeader },

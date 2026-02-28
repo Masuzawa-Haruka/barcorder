@@ -5,7 +5,7 @@ export default async function LoginPage({
 }: {
     searchParams: { error?: string };
 }) {
-    const error = await searchParams?.error;
+    const error = searchParams?.error;
 
     return (
         <main className="flex min-h-screen bg-gray-50 flex-col pt-16 pb-24">
