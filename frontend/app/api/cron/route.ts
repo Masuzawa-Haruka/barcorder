@@ -37,17 +37,25 @@ export async function GET(request: Request) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-        // 3. 「明日」の日付範囲を計算 (0:00:00 〜 23:59:59)
-        const today = new Date();
-        const tomorrowStart = new Date(today);
-        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-        tomorrowStart.setHours(0, 0, 0, 0);
+        // 3. 「明日」の日付範囲を計算 (0:00:00 〜 23:59:59) - JST(Asia/Tokyo, UTC+9) 基準
+        // Vercel上の実行環境は基本UTCのため、そのまま new Date() を使うと「どのタイムゾーンの明日か」が曖昧になる。
+        // ここではJSTを基準とするため、UTC現在時刻に+9時間してJSTに変換し、その上で「明日0:00〜23:59:59」を算出し、
+        // 最後にUTCに戻してISO文字列（startISO/endISO）として扱う。
+        const nowUtc = new Date();
+        const jstOffsetMs = 9 * 60 * 60 * 1000; // Asia/Tokyo はUTC+9で夏時間なし
+        const nowJst = new Date(nowUtc.getTime() + jstOffsetMs);
 
-        const tomorrowEnd = new Date(tomorrowStart);
-        tomorrowEnd.setHours(23, 59, 59, 999);
+        const tomorrowJstBase = new Date(nowJst);
+        tomorrowJstBase.setDate(tomorrowJstBase.getDate() + 1);
 
-        const startISO = tomorrowStart.toISOString();
-        const endISO = tomorrowEnd.toISOString();
+        const tomorrowStartJst = new Date(tomorrowJstBase);
+        tomorrowStartJst.setHours(0, 0, 0, 0);
+
+        const tomorrowEndJst = new Date(tomorrowJstBase);
+        tomorrowEndJst.setHours(23, 59, 59, 999);
+
+        const startISO = new Date(tomorrowStartJst.getTime() - jstOffsetMs).toISOString();
+        const endISO = new Date(tomorrowEndJst.getTime() - jstOffsetMs).toISOString();
 
         // 4. 賞味期限が「明日」かつステータスが「active」のアイテムを抽出
         // 同時に、そのアイテムが属する冷蔵庫と、その冷蔵庫のメンバー（およびプロフィール）を取得する
@@ -93,12 +101,20 @@ export async function GET(request: Request) {
             }[];
         }> = {};
 
-        expiringItems.forEach((item: any) => {
+        type DbItem = {
+            products_master: { name: string } | null;
+            refrigerators: {
+                name: string;
+                refrigerator_members: { user_id: string; profiles: { display_name: string } | null }[]
+            } | null;
+        };
+
+        (expiringItems as unknown as DbItem[]).forEach((item) => {
             const productName = item.products_master?.name || '不明な商品';
             const refrigeratorName = item.refrigerators?.name || '不明な冷蔵庫';
             const members = item.refrigerators?.refrigerator_members || [];
 
-            members.forEach((member: any) => {
+            members.forEach((member) => {
                 const userId = member.user_id;
                 const displayName = member.profiles?.display_name || 'ユーザー';
 
@@ -139,6 +155,6 @@ export async function GET(request: Request) {
 
     } catch (error: any) {
         console.error('Cron Job Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

@@ -11,13 +11,13 @@ export default async function LoginPage({
         <main className="flex min-h-screen bg-gray-50 flex-col pt-16 pb-24">
             {/* 簡易ヘッダー */}
             <header className="w-full shadow-md flex items-center px-4 py-2 sticky top-0 z-30 bg-white">
+                {/* Next.jsのImageがまだ適用されない環境もあるため最低限のimgタグで代用 */}
                 <img
                     src="/icon.png"
                     alt="Scan & Track Logo"
                     width={48}
                     height={48}
                     className="w-auto h-12 object-contain"
-                // Next.jsのImageがまだ適応されない環境もあるため最低限のimgタグで代用
                 />
             </header>
 

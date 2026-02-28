@@ -18,7 +18,7 @@ class AuthError extends Error {
 const getAuthClient = (req) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-        throw new AuthError('Authorization header is missing');
+        throw new AuthError('認証ヘッダーが設定されていません');
     }
     return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
         global: {
@@ -92,7 +92,8 @@ app.get('/api/product', async (req, res) => {
             price: null,
             image: item.image || "https://placehold.co/150x150?text=No+Image",
             url: "",
-            code: item.code
+            code: item.code,
+            categories: item.categories || ""
         }));
 
         res.json(results);

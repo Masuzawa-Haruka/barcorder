@@ -30,7 +30,7 @@ export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const supabase = createClient();
-  const [memberships, setMemberships] = useState<DashboardMembership[]>([]);
+  const [memberships, setMemberships] = useState<DashboardMembership[] | null>(null);
   const [currentRefrigeratorId, setCurrentRefrigeratorId] = useState<string>("");
   const [newRefName, setNewRefName] = useState("");
 
@@ -454,7 +454,7 @@ export default function Home() {
 
       <main className="flex flex-col min-h-screen bg-gray-50 pt-16 pb-24">
         {/* 冷蔵庫選択用のバー */}
-        {memberships.length > 0 && (
+        {memberships !== null && memberships.length > 0 && (
           <div className="w-full bg-blue-50 border-b border-blue-100 shadow-sm py-2 px-4 flex justify-center sticky top-16 z-40">
             <div className="relative max-w-sm w-full">
               <select
@@ -480,7 +480,11 @@ export default function Home() {
 
         <div id="reader-hidden" className="hidden"></div>
 
-        {memberships.length === 0 ? (
+        {memberships === null ? (
+          <div className="p-6 flex flex-col items-center flex-1 w-full justify-center">
+            <p className="text-gray-500 font-bold">データを読み込み中...</p>
+          </div>
+        ) : memberships.length === 0 ? (
           <div className="p-6 flex flex-col items-center flex-1 w-full justify-center">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-sm w-full text-center">
               <h2 className="text-xl font-bold mb-4 text-gray-800">始めましょう！</h2>
