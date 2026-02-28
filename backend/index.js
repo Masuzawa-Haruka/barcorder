@@ -20,7 +20,7 @@ const getAuthClient = (req) => {
     if (!authHeader) {
         throw new AuthError('認証ヘッダーが設定されていません');
     }
-    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
+    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY, {
         global: {
             headers: {
                 Authorization: authHeader,
@@ -141,7 +141,7 @@ app.get('/api/dashboard', async (req, res) => {
 // ---------------------------------------------------
 app.post('/api/refrigerators', async (req, res) => {
     const { name } = req.body;
-    if (!name || name.trim() === '') {
+    if (typeof name !== 'string' || name.trim() === '') {
         return res.status(400).json({ error: '冷蔵庫名は必須です' });
     }
 
@@ -181,8 +181,8 @@ app.post('/api/refrigerators', async (req, res) => {
 // ---------------------------------------------------
 app.get('/api/items', async (req, res) => {
     const { refrigerator_id } = req.query;
-    if (!refrigerator_id) {
-        return res.status(400).json({ error: 'refrigerator_id が必要です' });
+    if (typeof refrigerator_id !== 'string') {
+        return res.status(400).json({ error: 'refrigerator_id は文字列で指定してください' });
     }
 
     try {
@@ -231,10 +231,18 @@ app.post('/api/items', async (req, res) => {
     const { refrigerator_id, name, barcode, image, expiry_date, category } = req.body;
 
     if (!refrigerator_id) return res.status(400).json({ error: 'refrigerator_id は必須です' });
-    if (!name || name.trim() === '') return res.status(400).json({ error: '商品名（name）は必須です' });
-    if (!barcode || barcode.trim() === '') return res.status(400).json({ error: 'バーコードは必須です' });
-    if (!image || image.trim() === '') return res.status(400).json({ error: '画像URLは必須です' });
-    if (!expiry_date || expiry_date.trim() === '') return res.status(400).json({ error: '賞味期限は必須です' });
+    if (typeof name !== 'string' || name.trim() === '') {
+        return res.status(400).json({ error: '商品名（name）は必須です' });
+    }
+    if (typeof barcode !== 'string' || barcode.trim() === '') {
+        return res.status(400).json({ error: 'バーコードは必須です' });
+    }
+    if (typeof image !== 'string' || image.trim() === '') {
+        return res.status(400).json({ error: '画像URLは必須です' });
+    }
+    if (typeof expiry_date !== 'string' || expiry_date.trim() === '') {
+        return res.status(400).json({ error: '賞味期限は必須です' });
+    }
 
     const expiry = new Date(expiry_date);
     if (Number.isNaN(expiry.getTime())) {

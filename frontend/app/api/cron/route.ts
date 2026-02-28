@@ -155,6 +155,6 @@ export async function GET(request: Request) {
 
     } catch (error: unknown) {
         console.error('Cron Job Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ error: 'サーバー内部でエラーが発生しました。' }, { status: 500 });
     }
 }

@@ -9,6 +9,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
 import Image from 'next/image';
+import { useRouter } from "next/navigation";
 import { createClient } from '@/utils/supabase/client';
 
 type InventoryItemWithParsedDates = InventoryItem & {
@@ -28,6 +29,8 @@ type DashboardMembership = {
 
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const router = useRouter();
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
   const [memberships, setMemberships] = useState<DashboardMembership[] | null>(null);
@@ -67,14 +70,30 @@ export default function Home() {
 
   const refreshData = useCallback(async () => {
     try {
+      setDashboardError(null);
+
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        alert("ログインが必要です。");
+        router.push("/login");
+        return;
+      }
 
       const authHeader = { Authorization: `Bearer ${session.access_token}` };
 
       // ダッシュボード（冷蔵庫一覧）の取得
       const dashRes = await fetch(`${API_URL}/api/dashboard`, { headers: authHeader });
-      if (!dashRes.ok) return;
+
+      if (!dashRes.ok) {
+        if (dashRes.status === 401) {
+          alert("セッションの有効期限が切れました。再度ログインしてください。");
+          router.push("/login");
+        } else {
+          setDashboardError("サーバーからデータを取得できませんでした。");
+        }
+        return;
+      }
+
       const dashData = await dashRes.json();
       setMemberships(dashData);
 
@@ -86,13 +105,17 @@ export default function Home() {
 
       // 選択中の冷蔵庫があれば在庫を取得
       if (targetRefId) {
-        const itemsRes = await fetch(`${API_URL}/api/items?refrigerator_id=${targetRefId}`, { headers: authHeader });
+        const encodedRefId = encodeURIComponent(targetRefId);
+        const itemsRes = await fetch(`${API_URL}/api/items?refrigerator_id=${encodedRefId}`, { headers: authHeader });
         if (itemsRes.ok) setItems(await itemsRes.json());
       } else {
         setItems([]);
       }
-    } catch (err) { console.error(err); }
-  }, [API_URL, currentRefrigeratorId, supabase]);
+    } catch (err) {
+      console.error(err);
+      setDashboardError("通信エラーが発生しました。ネットワークを確認してください。");
+    }
+  }, [API_URL, currentRefrigeratorId, supabase, router]);
 
   useEffect(() => { refreshData(); }, [activeTab, currentRefrigeratorId, refreshData]);
 
@@ -479,7 +502,14 @@ export default function Home() {
 
         <div id="reader-hidden" className="hidden"></div>
 
-        {memberships === null ? (
+        {dashboardError !== null ? (
+          <div className="p-6 flex flex-col items-center flex-1 w-full justify-center text-center">
+            <p className="text-red-500 font-bold mb-4">⚠️ {dashboardError}</p>
+            <button onClick={refreshData} className="px-6 py-3 bg-blue-100 text-blue-700 rounded-xl font-bold hover:bg-blue-200 transition-colors">
+              再読み込み
+            </button>
+          </div>
+        ) : memberships === null ? (
           <div className="p-6 flex flex-col items-center flex-1 w-full justify-center">
             <p className="text-gray-500 font-bold">データを読み込み中...</p>
           </div>
