@@ -9,6 +9,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
 import Image from 'next/image';
+import { createClient } from '@/utils/supabase/client';
 
 type InventoryItemWithParsedDates = InventoryItem & {
   _expiryTime: number;
@@ -17,6 +18,10 @@ type InventoryItemWithParsedDates = InventoryItem & {
 
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  const supabase = createClient();
+  const [memberships, setMemberships] = useState<any[]>([]);
+  const [currentRefrigeratorId, setCurrentRefrigeratorId] = useState<string>("");
 
   const [activeTab, setActiveTab] = useState<'add' | 'inventory'>('add');
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -51,12 +56,35 @@ export default function Home() {
 
   const refreshData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/items`);
-      if (res.ok) setItems(await res.json());
-    } catch (err) { console.error(err); }
-  }, [API_URL]);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-  useEffect(() => { refreshData(); }, [activeTab, refreshData]);
+      const authHeader = { Authorization: `Bearer ${session.access_token}` };
+
+      // ダッシュボード（冷蔵庫一覧）の取得
+      const dashRes = await fetch(`${API_URL}/api/dashboard`, { headers: authHeader });
+      if (!dashRes.ok) return;
+      const dashData = await dashRes.json();
+      setMemberships(dashData);
+
+      let targetRefId = currentRefrigeratorId;
+      if (!targetRefId && dashData.length > 0) {
+        targetRefId = dashData[0].refrigerators.id;
+        setCurrentRefrigeratorId(targetRefId);
+      }
+
+      // 選択中の冷蔵庫があれば在庫を取得
+      if (targetRefId) {
+        const itemsRes = await fetch(`${API_URL}/api/items?refrigerator_id=${targetRefId}`, { headers: authHeader });
+        if (itemsRes.ok) setItems(await itemsRes.json());
+      } else {
+        setItems([]);
+      }
+    } catch (err) { console.error(err); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API_URL, currentRefrigeratorId]);
+
+  useEffect(() => { refreshData(); }, [activeTab, currentRefrigeratorId, refreshData]);
 
   useEffect(() => {
     if (selectedProduct) {
@@ -121,14 +149,25 @@ export default function Home() {
 
   const registerItem = async () => {
     if (!selectedProduct) return;
+    if (!currentRefrigeratorId) {
+      alert("冷蔵庫が選択されていません。先に冷蔵庫を作成・選択してください。");
+      return;
+    }
     const finalDate = expiryDate || getFutureDate(7);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+
       const res = await fetch(`${API_URL}/api/items`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
-          name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
-          image: selectedProduct.image, expiry_date: finalDate
+          refrigerator_id: currentRefrigeratorId,
+          name: selectedProduct.name,
+          barcode: selectedProduct.code || "unknown",
+          image: selectedProduct.image,
+          expiry_date: finalDate,
+          category: (selectedProduct as any).categories || '未分類'
         }),
       });
 
@@ -189,9 +228,12 @@ export default function Home() {
     if (newStatus === 'delete' && !confirm("完全に削除しますか?")) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
       const res = await fetch(`${API_URL}/api/items/${id}`, {
-        method, headers: { "Content-Type": "application/json" },
+        method, headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ status: newStatus }),
       });
 
@@ -210,8 +252,11 @@ export default function Home() {
   const updateExpiryDate = async (id: string, newDate: string) => {
     if (!newDate) return;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+
       const res = await fetch(`${API_URL}/api/items/${id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ expiry_date: newDate }),
       });
 
@@ -352,7 +397,7 @@ export default function Home() {
 
   return (
     <main className="flex flex-col min-h-screen bg-gray-50 pt-16 pb-24">
-      <header className="w-full shadow-md flex items-center px-4 py-2 sticky top-0 z-30 bg-white">
+      <header className="w-full shadow-md flex items-center px-4 py-2 sticky top-0 z-30 bg-white gap-4">
         <Image
           src="/icon.png"
           alt="Scan & Track Logo"
@@ -361,6 +406,19 @@ export default function Home() {
           className="w-auto h-12 object-contain"
           priority
         />
+        {memberships.length > 0 && (
+          <select
+            value={currentRefrigeratorId}
+            onChange={(e) => setCurrentRefrigeratorId(e.target.value)}
+            className="flex-1 p-2 border border-gray-200 rounded-xl shadow-sm bg-gray-50 text-sm font-bold truncate focus:ring-2 focus:ring-blue-500"
+          >
+            {memberships.map(m => (
+              <option key={m.refrigerators.id} value={m.refrigerators.id}>
+                {m.refrigerators.name}
+              </option>
+            ))}
+          </select>
+        )}
       </header>
 
       <div id="reader-hidden" className="hidden"></div>
