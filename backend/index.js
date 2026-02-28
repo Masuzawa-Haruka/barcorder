@@ -230,7 +230,9 @@ app.get('/api/items', async (req, res) => {
 app.post('/api/items', async (req, res) => {
     const { refrigerator_id, name, barcode, image, expiry_date, category } = req.body;
 
-    if (!refrigerator_id) return res.status(400).json({ error: 'refrigerator_id は必須です' });
+    if (typeof refrigerator_id !== 'string' || refrigerator_id.trim() === '') {
+        return res.status(400).json({ error: 'refrigerator_id は必須です' });
+    }
     if (typeof name !== 'string' || name.trim() === '') {
         return res.status(400).json({ error: '商品名（name）は必須です' });
     }
@@ -298,8 +300,19 @@ app.patch('/api/items/:id', async (req, res) => {
     const { status, expiry_date } = req.body;
 
     const updateFields = {};
-    if (status !== undefined) updateFields.status = status;
-    if (expiry_date !== undefined) updateFields.expiration_date = expiry_date;
+    if (status !== undefined) {
+        if (!['active', 'consumed', 'discarded'].includes(status)) {
+            return res.status(400).json({ error: '不正なステータスです' });
+        }
+        updateFields.status = status;
+    }
+    if (expiry_date !== undefined) {
+        const expiry = new Date(expiry_date);
+        if (Number.isNaN(expiry.getTime())) {
+            return res.status(400).json({ error: '賞味期限の形式が不正です' });
+        }
+        updateFields.expiration_date = expiry_date;
+    }
 
     if (Object.keys(updateFields).length === 0) {
         return res.status(400).json({
