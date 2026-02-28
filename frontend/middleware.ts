@@ -14,6 +14,6 @@ export const config = {
          * - favicon.ico (ファビコン)
          * - 各種画像などの拡張子
          */
-        '/((?!api($|/)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+        '/((?!api(?:$|/)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
     ],
 };
