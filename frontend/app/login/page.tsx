@@ -3,9 +3,10 @@ import { login, signup } from './actions';
 export default async function LoginPage({
     searchParams,
 }: {
-    searchParams: { error?: string };
+    searchParams: { error?: string, info?: string };
 }) {
     const error = searchParams?.error;
+    const info = searchParams?.info;
 
     return (
         <main className="flex min-h-screen bg-gray-50 flex-col pt-16 pb-24">
@@ -28,6 +29,12 @@ export default async function LoginPage({
                     {error && (
                         <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm font-bold text-center border border-red-200">
                             {error}
+                        </div>
+                    )}
+
+                    {info && (
+                        <div className="bg-blue-50 text-blue-600 p-3 rounded-lg mb-4 text-sm font-bold text-center border border-blue-200">
+                            {info}
                         </div>
                     )}
 
