@@ -127,7 +127,7 @@ export default function Home() {
     }
   }, [API_URL, currentRefrigeratorId, supabase, router]);
 
-  useEffect(() => { refreshData(); }, [activeTab, currentRefrigeratorId, refreshData]);
+  useEffect(() => { refreshData(); }, [refreshData]);
 
   useEffect(() => {
     if (selectedProduct) {

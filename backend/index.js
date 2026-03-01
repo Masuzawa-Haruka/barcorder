@@ -181,6 +181,9 @@ app.post('/api/refrigerators', async (req, res) => {
 // ---------------------------------------------------
 app.get('/api/items', async (req, res) => {
     const { refrigerator_id } = req.query;
+    if (refrigerator_id === undefined) {
+        return res.status(400).json({ error: 'refrigerator_id は必須です' });
+    }
     if (typeof refrigerator_id !== 'string') {
         return res.status(400).json({ error: 'refrigerator_id は文字列で指定してください' });
     }
