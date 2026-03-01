@@ -38,12 +38,16 @@ export async function signup(formData: FormData) {
 
     const data = { email, password };
 
-    const { error } = await supabase.auth.signUp(data);
+    const { data: signUpData, error } = await supabase.auth.signUp(data);
 
     if (error) {
         redirect(`/login?error=${encodeURIComponent('ユーザーの作成に失敗しました')}`);
     }
 
-    revalidatePath('/', 'layout');
-    redirect('/');
+    if (signUpData?.session) {
+        revalidatePath('/', 'layout');
+        redirect('/');
+    }
+
+    redirect(`/login?info=${encodeURIComponent('確認メールを送信しました。メール内のリンクを開いた後に再度ログインしてください。')}`);
 }

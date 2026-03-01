@@ -254,6 +254,8 @@ app.post('/api/items', async (req, res) => {
     try {
         const authSupabase = getAuthClient(req);
 
+        const finalCategory = typeof category === 'string' && category.trim() !== '' ? category : '未分類';
+
         // 1. 商品マスターにUpsert（既存のバーコードがあれば更新）
         const { error: pmError } = await authSupabase
             .from('products_master')
@@ -261,7 +263,7 @@ app.post('/api/items', async (req, res) => {
                 barcode,
                 name,
                 image_url: image,
-                category: category || '未分類'
+                category: finalCategory
             }, { onConflict: 'barcode' });
 
         if (pmError) {
@@ -307,11 +309,30 @@ app.patch('/api/items/:id', async (req, res) => {
         updateFields.status = status;
     }
     if (expiry_date !== undefined) {
-        const expiry = new Date(expiry_date);
-        if (Number.isNaN(expiry.getTime())) {
-            return res.status(400).json({ error: '賞味期限の形式が不正です' });
+        if (typeof expiry_date !== 'string') {
+            return res.status(400).json({ error: '賞味期限はYYYY-MM-DD形式の文字列で指定してください' });
         }
-        updateFields.expiration_date = expiry_date;
+        const trimmedExpiry = expiry_date.trim();
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(trimmedExpiry)) {
+            return res.status(400).json({ error: '賞味期限の形式が不正です（YYYY-MM-DD形式で指定してください）' });
+        }
+
+        const [yearStr, monthStr, dayStr] = trimmedExpiry.split('-');
+        const year = Number(yearStr);
+        const month = Number(monthStr);
+        const day = Number(dayStr);
+
+        const expiry = new Date(Date.UTC(year, month - 1, day));
+        if (
+            Number.isNaN(expiry.getTime()) ||
+            expiry.getUTCFullYear() !== year ||
+            expiry.getUTCMonth() !== month - 1 ||
+            expiry.getUTCDate() !== day
+        ) {
+            return res.status(400).json({ error: '存在しない日付が指定されています' });
+        }
+        updateFields.expiration_date = trimmedExpiry;
     }
 
     if (Object.keys(updateFields).length === 0) {

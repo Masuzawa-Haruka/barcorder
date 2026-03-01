@@ -58,6 +58,14 @@ export async function GET(request: Request) {
 
         // 4. 賞味期限が「明日」かつステータスが「active」のアイテムを抽出
         // 同時に、そのアイテムが属する冷蔵庫と、その冷蔵庫のメンバー（およびプロフィール）を取得する
+        type DbItem = {
+            products_master: { name: string } | null;
+            refrigerators: {
+                name: string;
+                refrigerator_members: { user_id: string; profiles: { display_name: string } | null }[]
+            } | null;
+        };
+
         const { data: expiringItems, error } = await supabase
             .from('inventory_items')
             .select(`
@@ -81,7 +89,8 @@ export async function GET(request: Request) {
       `)
             .eq('status', 'active')
             .gte('expiration_date', startISO.slice(0, 10))
-            .lte('expiration_date', endISO.slice(0, 10));
+            .lte('expiration_date', endISO.slice(0, 10))
+            .returns<DbItem[]>();
 
         if (error) {
             throw error;
@@ -100,15 +109,7 @@ export async function GET(request: Request) {
             }[];
         }> = {};
 
-        type DbItem = {
-            products_master: { name: string } | null;
-            refrigerators: {
-                name: string;
-                refrigerator_members: { user_id: string; profiles: { display_name: string } | null }[]
-            } | null;
-        };
-
-        (expiringItems as unknown as DbItem[]).forEach((item) => {
+        expiringItems.forEach((item) => {
             const productName = item.products_master?.name || '不明な商品';
             const refrigeratorName = item.refrigerators?.name || '不明な冷蔵庫';
             const members = item.refrigerators?.refrigerator_members || [];

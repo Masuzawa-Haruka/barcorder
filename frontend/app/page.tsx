@@ -107,7 +107,17 @@ export default function Home() {
       if (targetRefId) {
         const encodedRefId = encodeURIComponent(targetRefId);
         const itemsRes = await fetch(`${API_URL}/api/items?refrigerator_id=${encodedRefId}`, { headers: authHeader });
-        if (itemsRes.ok) setItems(await itemsRes.json());
+        if (!itemsRes.ok) {
+          if (itemsRes.status === 401) {
+            alert("セッションの有効期限が切れました。再度ログインしてください。");
+            router.push("/login");
+          } else {
+            setItems([]);
+            setDashboardError("在庫データを取得できませんでした。");
+          }
+          return;
+        }
+        setItems(await itemsRes.json());
       } else {
         setItems([]);
       }
