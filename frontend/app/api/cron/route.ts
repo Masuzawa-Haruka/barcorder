@@ -1,0 +1,169 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+// Vercel Cron Job用の設定（サーバーレス関数としてエッジまたはNodeで動く）
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+    // 1. Cron Jobの認証（不正アクセスの防止）
+    // Vercel Cronはリクエストヘッダーに `Authorization: Bearer <CRON_SECRET>` を付与する
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (!cronSecret) {
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('[cron] CRON_SECRET が未設定ですが、NODE_ENV=development のため認証チェックをスキップします。');
+        } else {
+            return NextResponse.json(
+                { error: 'CRON_SECRET が未設定のためバッチ処理を実行できません。' },
+                { status: 500 }
+            );
+        }
+    } else {
+        if (authHeader !== `Bearer ${cronSecret}`) {
+            return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 });
+        }
+    }
+
+    try {
+        // 2. サービスロールキーを使用してSupabaseクライアントを初期化
+        // ※RLSをバイパスして全ユーザーのデータ（明日期限切れ）を一度に取得するため
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !supabaseServiceKey) {
+            throw new Error('Supabaseの環境変数（SERVICE_ROLE_KEY）が設定されていません。バッチ処理を実行できません。');
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        // 3. 「明日」の日付（JST, Asia/Tokyo, UTC+9）を `YYYY-MM-DD` 形式で算出する
+        const nowUtc = new Date();
+        const jstOffsetMs = 9 * 60 * 60 * 1000; // Asia/Tokyo はUTC+9で夏時間なし
+        const nowJst = new Date(nowUtc.getTime() + jstOffsetMs);
+        const tomorrowJst = new Date(nowJst);
+
+        // nowJst は「JST相当の時刻」を表しているため、UTC系のゲッターを使うことでJSTの暦日を取得できる
+        tomorrowJst.setUTCDate(tomorrowJst.getUTCDate() + 1);
+        const year = tomorrowJst.getUTCFullYear();
+        const month = String(tomorrowJst.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(tomorrowJst.getUTCDate()).padStart(2, '0');
+
+        // JST基準の「明日」を `YYYY-MM-DD` で表現した文字列
+        const tomorrowJstDate = `${year}-${month}-${day}`;
+
+        // 既存コードとの互換性のため、startISO/endISO には同じ文字列を割り当てる
+        const startISO = tomorrowJstDate;
+        const endISO = tomorrowJstDate;
+
+        // 4. 賞味期限が「明日」かつステータスが「active」のアイテムを抽出
+        // 同時に、そのアイテムが属する冷蔵庫と、その冷蔵庫のメンバー（およびプロフィール）を取得する
+        type DbItem = {
+            products_master: { name: string } | null;
+            refrigerators: {
+                name: string;
+                refrigerator_members: { user_id: string; profiles: { display_name: string } | null }[]
+            } | null;
+        };
+
+        const { data: expiringItems, error } = await supabase
+            .from('inventory_items')
+            .select(`
+        id,
+        barcode,
+        expiration_date,
+        refrigerator_id,
+        products_master (
+          name,
+          image_url
+        ),
+        refrigerators (
+          name,
+          refrigerator_members (
+            user_id,
+            profiles (
+              display_name
+            )
+          )
+        )
+      `)
+            .eq('status', 'active')
+            .gte('expiration_date', startISO.slice(0, 10))
+            .lte('expiration_date', endISO.slice(0, 10))
+            .returns<DbItem[]>();
+
+        if (error) {
+            throw error;
+        }
+
+        if (!expiringItems || expiringItems.length === 0) {
+            return NextResponse.json({ message: '明日期限切れのアイテムはありませんでした。' });
+        }
+
+        // 5. 送信先のユーザーごとに通知内容をグループ化する
+        const notificationsByUser: Record<string, {
+            displayName: string;
+            items: {
+                productName: string;
+                refrigeratorName: string;
+            }[];
+        }> = {};
+
+        expiringItems.forEach((item) => {
+            const productName = item.products_master?.name || '不明な商品';
+            const refrigeratorName = item.refrigerators?.name || '不明な冷蔵庫';
+            const members = item.refrigerators?.refrigerator_members || [];
+
+            members.forEach((member) => {
+                const userId = member.user_id;
+                const displayName = member.profiles?.display_name || 'ユーザー';
+
+                if (!notificationsByUser[userId]) {
+                    notificationsByUser[userId] = {
+                        displayName,
+                        items: []
+                    };
+                }
+
+                notificationsByUser[userId].items.push({
+                    productName,
+                    refrigeratorName
+                });
+            });
+        });
+
+        // 6. ユーザーごとに非同期で通知（メール送信やPush通知等）を実行
+        const sendPromises = Object.entries(notificationsByUser).map(async ([userId, data]) => {
+            // NOTE: ここに実際のメール送信API（ResendやSendGridなど）を呼び出す処理を実装します。
+            if (process.env.NODE_ENV === 'development') {
+                // 開発環境のみ、デバッグのために詳細なMockメール内容をログ出力する
+                console.log(`[Mock Email] To UserID: ${userId} (${data.displayName} 様)`);
+                console.log(`[Mock Email] Subject: 【リマインダー】明日賞味期限切れになる商品があります`);
+                console.log('[Mock Email] Body:');
+                data.items.forEach((i) => {
+                    console.log(`  - ${i.productName} (場所: ${i.refrigeratorName})`);
+                });
+                console.log('--------------------------------------------------');
+            } else {
+                // 本番等の環境では、個人情報・識別子を含まない簡易ログのみを出力する
+                console.log('[Cron] リマインダー送信処理を実行しました（Mock Email）。');
+                console.log(
+                    `[Cron] 対象ユーザー数: ${Object.keys(notificationsByUser).length}, 対象アイテム数: ${data.items.length}`
+                );
+            }
+
+            return Promise.resolve();
+        });
+
+        await Promise.allSettled(sendPromises);
+
+        return NextResponse.json({
+            success: true,
+            message: `${Object.keys(notificationsByUser).length}人のユーザーにリマインダーを送信しました。`
+        });
+
+    } catch (error: unknown) {
+        console.error('Cron Job Error:', error);
+        return NextResponse.json({ error: 'サーバー内部でエラーが発生しました。' }, { status: 500 });
+    }
+}

@@ -7,13 +7,46 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const port = 3001;
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+class AuthError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'AuthError';
+    }
+}
+
+// JWTトークンを含むリクエストごとのSupabaseクライアントを作成するヘルパー関数
+const getAuthClient = (req) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        throw new AuthError('認証ヘッダーが設定されていません');
+    }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    if (!supabaseUrl) {
+        throw new Error('サーバー設定エラー：環境変数 SUPABASE_URL が未設定です。');
+    }
+    const anonKeyEnv = process.env.SUPABASE_ANON_KEY;
+    const legacyKeyEnv = process.env.SUPABASE_KEY;
+    const anonKey = anonKeyEnv || legacyKeyEnv;
+    if (!anonKey) {
+        throw new Error('サーバー設定エラー：環境変数 SUPABASE_ANON_KEY（または互換用 SUPABASE_KEY）が未設定です。セキュリティ上の理由から、匿名キーによる接続のみ許可されています。');
+    }
+    if (!anonKeyEnv && legacyKeyEnv) {
+        console.warn('警告：SUPABASE_ANON_KEY が未設定のため、互換性維持のために SUPABASE_KEY からフォールバックしてSupabaseに接続しています。今後のため SUPABASE_ANON_KEY への移行を検討してください。');
+    }
+    return createClient(supabaseUrl, anonKey, {
+        global: {
+            headers: {
+                Authorization: authHeader,
+            },
+        },
+    });
+};
 
 app.use(cors());
 app.use(express.json());
 
 // ---------------------------------------------------
-// 1. 商品検索API (Open Food Facts 版)
+// 1. 商品検索API (Open Food Facts 版 - 認証不要)
 // ---------------------------------------------------
 app.get('/api/product', async (req, res) => {
     const query = req.query.code;
@@ -42,14 +75,13 @@ app.get('/api/product', async (req, res) => {
         }
         // B. キーワード検索の場合 (検索結果リストを取得)
         else {
-            // 日本語(jp)サブドメインを使って検索
             const searchUrl = `https://jp.openfoodfacts.org/cgi/search.pl`;
             const params = {
                 search_terms: query,
                 search_simple: 1,
                 action: 'process',
                 json: 1,
-                page_size: 24, // 取得件数
+                page_size: 24,
             };
 
             const response = await axios.get(searchUrl, { params });
@@ -68,14 +100,13 @@ app.get('/api/product', async (req, res) => {
             return res.status(404).json({ error: "商品が見つかりませんでした" });
         }
 
-        // フロントエンドで扱いやすい形に整形して返す
-        // ※Open Food Factsには「価格」がないので price は null にします
         const results = products.map(item => ({
             name: item.name,
             price: null,
             image: item.image || "https://placehold.co/150x150?text=No+Image",
-            url: "", // 商品ページURLは特にないので空文字
-            code: item.code
+            url: "",
+            code: item.code,
+            categories: item.categories || ""
         }));
 
         res.json(results);
@@ -87,120 +118,313 @@ app.get('/api/product', async (req, res) => {
 });
 
 // ---------------------------------------------------
-// 2. 在庫一覧取得API
+// 2. ダッシュボード取得API (冷蔵庫一覧)
 // ---------------------------------------------------
-app.get('/api/items', async (req, res) => {
+app.get('/api/dashboard', async (req, res) => {
     try {
-        const { data, error } = await supabase
-            .from('items')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const authSupabase = getAuthClient(req);
+
+        const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+        if (authError || !user) {
+            return res.status(401).json({ error: '認証エラー：もう一度ログインしてください' });
+        }
+
+        const { data, error } = await authSupabase
+            .from('refrigerator_members')
+            .select(`
+                role,
+                refrigerators!inner (
+                    id,
+                    name
+                )
+            `)
+            .eq('user_id', user.id);
 
         if (error) return res.status(500).json({ error: error.message });
         res.json(data);
     } catch (e) {
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
+        console.error('GET /api/dashboard エラー:', e);
+        res.status(500).json({ error: 'サーバーエラーが発生しました。' });
+    }
+});
+
+// ---------------------------------------------------
+// 2.5 冷蔵庫作成API
+// ---------------------------------------------------
+app.post('/api/refrigerators', async (req, res) => {
+    const { name } = req.body;
+    if (typeof name !== 'string' || name.trim() === '') {
+        return res.status(400).json({ error: '冷蔵庫名は必須です' });
+    }
+
+    try {
+        const authSupabase = getAuthClient(req);
+        const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+        if (authError || !user) {
+            return res.status(401).json({ error: '認証エラー' });
+        }
+
+        // 冷蔵庫作成とオーナー登録をDB側トランザクション（RPC）で一括実行する
+        const { data: refId, error: rpcError } = await authSupabase.rpc(
+            'create_refrigerator_with_owner',
+            { p_name: name }
+        );
+
+        if (rpcError) {
+            console.error('create_refrigerator_with_owner RPC error:', rpcError);
+            return res.status(500).json({ error: `冷蔵庫作成処理でDBエラー: ${rpcError.message}` });
+        }
+
+        if (!refId) {
+            console.error('create_refrigerator_with_owner RPC returned no data');
+            return res.status(500).json({ error: '冷蔵庫作成処理で予期せぬエラーが発生しました。' });
+        }
+
+        res.status(201).json({ id: refId, name });
+    } catch (e) {
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
+        console.error('POST /api/refrigerators エラー:', e);
+        res.status(500).json({ error: 'サーバー内で予期せぬエラーが発生しました。' });
+    }
+});
+
+// ---------------------------------------------------
+// 3. 在庫一覧取得API (`inventory_items` -> `products_master`)
+// ---------------------------------------------------
+app.get('/api/items', async (req, res) => {
+    const { refrigerator_id } = req.query;
+    if (refrigerator_id === undefined) {
+        return res.status(400).json({ error: 'refrigerator_id は必須です' });
+    }
+    if (typeof refrigerator_id !== 'string') {
+        return res.status(400).json({ error: 'refrigerator_id は文字列で指定してください' });
+    }
+
+    try {
+        const authSupabase = getAuthClient(req);
+
+        const { data, error, status } = await authSupabase
+            .from('inventory_items')
+            .select(`
+                id,
+                refrigerator_id,
+                barcode,
+                expiration_date,
+                status,
+                added_at,
+                products_master (
+                    name,
+                    image_url,
+                    category
+                )
+            `)
+            .eq('refrigerator_id', refrigerator_id)
+            .order('expiration_date', { ascending: true });
+
+        if (error) return res.status(status || 500).json({ error: error.message });
+
+        // フロントエンドのUIに合わせた形式に整形する
+        const formattedData = data.map(item => ({
+            id: item.id,
+            refrigerator_id: item.refrigerator_id,
+            barcode: item.barcode,
+            name: item.products_master?.name || "名称未設定",
+            image_url: item.products_master?.image_url || "",
+            category: item.products_master?.category || "",
+            expiry_date: item.expiration_date,
+            status: item.status,
+            created_at: item.added_at
+        }));
+
+        res.json(formattedData);
+    } catch (e) {
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('GET /api/items エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
 });
 
 // ---------------------------------------------------
-// 3. 商品登録API
+// 4. 商品登録API (`products_master` Upsert -> `inventory_items` Insert)
 // ---------------------------------------------------
 app.post('/api/items', async (req, res) => {
-    const { name, barcode, image, expiry_date } = req.body;
+    const { refrigerator_id, name, barcode, image, expiry_date, category } = req.body;
 
-    // 必須項目のバリデーション
-    if (!name || typeof name !== 'string' || name.trim() === '') {
+    if (typeof refrigerator_id !== 'string' || refrigerator_id.trim() === '') {
+        return res.status(400).json({ error: 'refrigerator_id は必須です' });
+    }
+    if (typeof name !== 'string' || name.trim() === '') {
         return res.status(400).json({ error: '商品名（name）は必須です' });
     }
-    if (!barcode || typeof barcode !== 'string' || barcode.trim() === '') {
-        return res.status(400).json({ error: 'バーコード（barcode）は必須です' });
+    if (typeof barcode !== 'string' || barcode.trim() === '') {
+        return res.status(400).json({ error: 'バーコードは必須です' });
     }
-    if (!image || typeof image !== 'string' || image.trim() === '') {
-        return res.status(400).json({ error: '画像URL（image）は必須です' });
+    if (typeof image !== 'string' || image.trim() === '') {
+        return res.status(400).json({ error: '画像URLは必須です' });
     }
-    if (!expiry_date || typeof expiry_date !== 'string' || expiry_date.trim() === '') {
-        return res.status(400).json({ error: '賞味期限（expiry_date）は必須です' });
+    if (typeof expiry_date !== 'string' || expiry_date.trim() === '') {
+        return res.status(400).json({ error: '賞味期限は必須です' });
     }
 
-    // 日付形式のバリデーション
-    const expiry = new Date(expiry_date);
-    if (Number.isNaN(expiry.getTime())) {
-        return res.status(400).json({ error: '賞味期限（expiry_date）の形式が不正です' });
+    const trimmedExpiry = expiry_date.trim();
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(trimmedExpiry)) {
+        return res.status(400).json({ error: '賞味期限の形式が不正です（YYYY-MM-DD形式で指定してください）' });
+    }
+
+    const [yearStr, monthStr, dayStr] = trimmedExpiry.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+
+    const expiry = new Date(Date.UTC(year, month - 1, day));
+    if (
+        Number.isNaN(expiry.getTime()) ||
+        expiry.getUTCFullYear() !== year ||
+        expiry.getUTCMonth() !== month - 1 ||
+        expiry.getUTCDate() !== day
+    ) {
+        return res.status(400).json({ error: '存在しない日付が指定されています' });
     }
 
     try {
-        const { data, error } = await supabase
-            .from('items')
-            .insert([{ name, barcode, image_url: image, expiry_date, status: 'active' }])
+        const authSupabase = getAuthClient(req);
+
+        const finalCategory = typeof category === 'string' && category.trim() !== '' ? category : '未分類';
+
+        // 1. 商品マスターにUpsert（既存のバーコードがあれば更新）
+        const { error: pmError } = await authSupabase
+            .from('products_master')
+            .upsert({
+                barcode,
+                name,
+                image_url: image,
+                category: finalCategory
+            }, { onConflict: 'barcode' });
+
+        if (pmError) {
+            console.error('products_master Upsert エラー:', pmError);
+            return res.status(500).json({ error: '商品マスターの登録に失敗しました。' });
+        }
+
+        // 2. 在庫に追加
+        const { data, error } = await authSupabase
+            .from('inventory_items')
+            .insert([{
+                refrigerator_id,
+                barcode,
+                expiration_date: trimmedExpiry,
+                status: 'active'
+            }])
             .select();
 
         if (error) {
-            console.error('POST /api/items Supabase エラー:', error);
-            // Supabaseからのエラー内容はサーバーログに出力し、クライアントには汎用的なメッセージを返す
-            return res.status(500).json({
-                error: 'データベースへの保存に失敗しました。管理画面でSupabaseの状態を確認してください。'
-            });
+            console.error('inventory_items Insert エラー:', error);
+            return res.status(500).json({ error: '在庫の登録に失敗しました。' });
         }
         res.status(201).json(data[0]);
     } catch (e) {
-        console.error('POST /api/items catch エラー:', e);
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
+        console.error('POST /api/items エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
 });
 
 // ---------------------------------------------------
-// 4. ステータス・賞味期限更新API
+// 5. ステータス・賞味期限更新API (`inventory_items` を対象)
 // ---------------------------------------------------
 app.patch('/api/items/:id', async (req, res) => {
     const { id } = req.params;
     const { status, expiry_date } = req.body;
 
-    // 更新するフィールドを動的に構築
     const updateFields = {};
-    if (status !== undefined) updateFields.status = status;
-    if (expiry_date !== undefined) updateFields.expiry_date = expiry_date;
+    if (status !== undefined) {
+        if (!['active', 'consumed', 'discarded'].includes(status)) {
+            return res.status(400).json({ error: '不正なステータスです' });
+        }
+        updateFields.status = status;
+    }
+    if (expiry_date !== undefined) {
+        if (typeof expiry_date !== 'string') {
+            return res.status(400).json({ error: '賞味期限はYYYY-MM-DD形式の文字列で指定してください' });
+        }
+        const trimmedExpiry = expiry_date.trim();
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(trimmedExpiry)) {
+            return res.status(400).json({ error: '賞味期限の形式が不正です（YYYY-MM-DD形式で指定してください）' });
+        }
 
-    // 更新対象フィールドが1つもない場合は 400 を返却
+        const [yearStr, monthStr, dayStr] = trimmedExpiry.split('-');
+        const year = Number(yearStr);
+        const month = Number(monthStr);
+        const day = Number(dayStr);
+
+        const expiry = new Date(Date.UTC(year, month - 1, day));
+        if (
+            Number.isNaN(expiry.getTime()) ||
+            expiry.getUTCFullYear() !== year ||
+            expiry.getUTCMonth() !== month - 1 ||
+            expiry.getUTCDate() !== day
+        ) {
+            return res.status(400).json({ error: '存在しない日付が指定されています' });
+        }
+        updateFields.expiration_date = trimmedExpiry;
+    }
+
     if (Object.keys(updateFields).length === 0) {
         return res.status(400).json({
-            error: '更新対象フィールドが指定されていません。status または expiry_date を指定してください。'
+            error: '更新対象フィールドが指定されていません。更新可能なフィールド（status, expiry_date）のいずれかを指定してください。'
         });
     }
 
     try {
-        const { data, error } = await supabase
-            .from('items')
+        const authSupabase = getAuthClient(req);
+
+        const { data, error } = await authSupabase
+            .from('inventory_items')
             .update(updateFields)
             .eq('id', id)
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            // Supabase 側の認証・認可エラーは適切なHTTPステータスにマッピングする
+            if (error.status === 401 || error.status === 403) {
+                return res.status(error.status).json({ error: error.message });
+            }
+            return res.status(500).json({ error: error.message });
+        }
 
-        // 更新結果が0件の場合は 404 を返却
         if (!data || data.length === 0) {
-            return res.status(404).json({ error: '指定されたIDのアイテムは存在しません。' });
+            return res.status(404).json({ error: '指定されたIDのアイテムは存在しないか、権限がありません。' });
         }
 
         res.json(data[0]);
     } catch (e) {
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('PATCH /api/items/:id エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
 });
 
 // ---------------------------------------------------
-// 5. 削除API
+// 6. 削除API (`inventory_items` から削除)
 // ---------------------------------------------------
 app.delete('/api/items/:id', async (req, res) => {
     const { id } = req.params;
 
     try {
-        const { error } = await supabase.from('items').delete().eq('id', id);
+        const authSupabase = getAuthClient(req);
+
+        const { error } = await authSupabase
+            .from('inventory_items')
+            .delete()
+            .eq('id', id);
+
         if (error) return res.status(500).json({ error: error.message });
         res.status(204).send();
     } catch (e) {
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('DELETE /api/items/:id エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }

@@ -9,14 +9,33 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { parseLocalDate, formatDateForDisplay, getLocalDateString } from "@/utils/dateUtils";
 import Image from 'next/image';
+import { useRouter } from "next/navigation";
+import { createClient } from '@/utils/supabase/client';
 
 type InventoryItemWithParsedDates = InventoryItem & {
   _expiryTime: number;
   _createdTime: number;
 };
 
+type DashboardRefrigeratorSummary = {
+  id: string;
+  name: string;
+};
+
+type DashboardMembership = {
+  role: string;
+  refrigerators: DashboardRefrigeratorSummary;
+};
+
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const router = useRouter();
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+
+  const supabase = useMemo(() => createClient(), []);
+  const [memberships, setMemberships] = useState<DashboardMembership[] | null>(null);
+  const [currentRefrigeratorId, setCurrentRefrigeratorId] = useState<string>("");
+  const [newRefName, setNewRefName] = useState("");
 
   const [activeTab, setActiveTab] = useState<'add' | 'inventory'>('add');
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -51,12 +70,72 @@ export default function Home() {
 
   const refreshData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/items`);
-      if (res.ok) setItems(await res.json());
-    } catch (err) { console.error(err); }
-  }, [API_URL]);
+      setDashboardError(null);
 
-  useEffect(() => { refreshData(); }, [activeTab, refreshData]);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("ログインが必要です。");
+        router.push("/login");
+        return;
+      }
+
+      const authHeader = { Authorization: `Bearer ${session.access_token}` };
+
+      // ダッシュボード（冷蔵庫一覧）の取得
+      const dashRes = await fetch(`${API_URL}/api/dashboard`, { headers: authHeader });
+
+      if (!dashRes.ok) {
+        if (dashRes.status === 401) {
+          alert("セッションの有効期限が切れました。再度ログインしてください。");
+          router.push("/login");
+        } else {
+          setDashboardError("サーバーからデータを取得できませんでした。");
+        }
+        return;
+      }
+
+      const dashData = await dashRes.json();
+      setMemberships(dashData);
+
+      let targetRefId = currentRefrigeratorId;
+      if (!targetRefId && Array.isArray(dashData) && dashData.length > 0) {
+        const firstWithRefrigerator = dashData.find(
+          (membership: DashboardMembership) =>
+            membership &&
+            membership.refrigerators &&
+            membership.refrigerators.id
+        );
+        if (firstWithRefrigerator && firstWithRefrigerator.refrigerators) {
+          targetRefId = firstWithRefrigerator.refrigerators.id;
+          setCurrentRefrigeratorId(targetRefId);
+        }
+      }
+
+      // 選択中の冷蔵庫があれば在庫を取得
+      if (targetRefId) {
+        const encodedRefId = encodeURIComponent(targetRefId);
+        const itemsRes = await fetch(`${API_URL}/api/items?refrigerator_id=${encodedRefId}`, { headers: authHeader });
+        if (!itemsRes.ok) {
+          if (itemsRes.status === 401) {
+            alert("セッションの有効期限が切れました。再度ログインしてください。");
+            router.push("/login");
+          } else {
+            setItems([]);
+            setDashboardError("在庫データを取得できませんでした。");
+          }
+          return;
+        }
+        setItems(await itemsRes.json());
+      } else {
+        setItems([]);
+      }
+    } catch (err) {
+      console.error(err);
+      setDashboardError("通信エラーが発生しました。ネットワークを確認してください。");
+    }
+  }, [API_URL, currentRefrigeratorId, supabase, router]);
+
+  useEffect(() => { refreshData(); }, [refreshData]);
 
   useEffect(() => {
     if (selectedProduct) {
@@ -119,16 +198,70 @@ export default function Home() {
     setTimeout(() => searchProduct(result), 300);
   };
 
+  const createRefrigerator = async () => {
+    if (!newRefName) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
+
+      const res = await fetch(`${API_URL}/api/refrigerators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ name: newRefName }),
+      });
+
+      if (!res.ok) {
+        let errMsg = "作成に失敗しました";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            errMsg = `以下の理由で作成に失敗しました:\n${errData.error}`;
+          }
+        } catch (_) { }
+        alert(errMsg);
+        return;
+      }
+
+      setNewRefName("");
+      refreshData();
+    } catch (e) {
+      console.error(e);
+      alert("通信エラーが発生しました。");
+    }
+  };
+
   const registerItem = async () => {
     if (!selectedProduct) return;
+    if (!currentRefrigeratorId) {
+      alert("冷蔵庫が選択されていません。先に冷蔵庫を作成・選択してください。");
+      return;
+    }
     const finalDate = expiryDate || getFutureDate(7);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
+
       const res = await fetch(`${API_URL}/api/items`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
-          name: selectedProduct.name, barcode: selectedProduct.code || "unknown",
-          image: selectedProduct.image, expiry_date: finalDate
+          refrigerator_id: currentRefrigeratorId,
+          name: selectedProduct.name,
+          barcode: selectedProduct.code || `custom-${Date.now()}`,
+          image: selectedProduct.image,
+          expiry_date: finalDate,
+          category: selectedProduct.categories || '未分類'
         }),
       });
 
@@ -189,9 +322,17 @@ export default function Home() {
     if (newStatus === 'delete' && !confirm("完全に削除しますか?")) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
+
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
       const res = await fetch(`${API_URL}/api/items/${id}`, {
-        method, headers: { "Content-Type": "application/json" },
+        method, headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ status: newStatus }),
       });
 
@@ -210,8 +351,16 @@ export default function Home() {
   const updateExpiryDate = async (id: string, newDate: string) => {
     if (!newDate) return;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
+
       const res = await fetch(`${API_URL}/api/items/${id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ expiry_date: newDate }),
       });
 
@@ -351,8 +500,8 @@ export default function Home() {
   const totalPages = Math.ceil(candidates.length / itemsPerPage);
 
   return (
-    <main className="flex flex-col min-h-screen bg-gray-50 pt-16 pb-24">
-      <header className="w-full shadow-md flex items-center px-4 py-2 sticky top-0 z-30 bg-white">
+    <>
+      <header className="fixed top-0 left-0 right-0 h-16 shadow-md flex items-center px-4 z-50 bg-white">
         <Image
           src="/icon.png"
           alt="Scan & Track Logo"
@@ -361,249 +510,314 @@ export default function Home() {
           className="w-auto h-12 object-contain"
           priority
         />
+        <span className="font-bold text-gray-800 ml-3 text-lg hidden sm:block">SCAN & TRACK</span>
       </header>
 
-      <div id="reader-hidden" className="hidden"></div>
-
-      {/* TAB 1: 追加 */}
-      {activeTab === 'add' && (
-        <div className="p-6 flex flex-col items-center animate-fade-in w-full">
-          <h1 className="text-2xl font-bold mb-8 text-gray-800">🛍️ 商品を追加</h1>
-
-          <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
-            {!isScanning ? (
-              <>
-                <div className="flex gap-2 mb-6">
-                  <input type="text" value={inputCode} onChange={(e) => setInputCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchProduct()} placeholder="バーコード / 商品名" className="flex-1 p-3 border rounded-xl" />
-                  <button onClick={() => searchProduct()} disabled={loading} className="bg-blue-600 text-white px-6 rounded-xl font-bold">検索</button>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={() => setIsScanning(true)} className="flex-1 p-3 bg-blue-500 text-white rounded-xl font-bold">📷 カメラ</button>
-                  <label className="flex-1 flex justify-center p-3 bg-gray-100 border-2 border-dashed rounded-xl cursor-pointer font-bold text-gray-600">
-                    <span>📁 画像</span><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                  </label>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center">
-                <BarcodeScanner onResult={handleScanSuccess} />
-                <button onClick={() => setIsScanning(false)} className="mt-6 text-gray-500 underline font-bold">キャンセル</button>
+      <main className="flex flex-col min-h-screen bg-gray-50 pt-16 pb-24">
+        {/* 冷蔵庫選択用のバー */}
+        {memberships !== null && memberships.length > 0 && (
+          <div className="w-full bg-blue-50 border-b border-blue-100 shadow-sm py-2 px-4 flex justify-center sticky top-16 z-40">
+            <div className="relative max-w-sm w-full">
+              <select
+                value={currentRefrigeratorId}
+                onChange={(e) => setCurrentRefrigeratorId(e.target.value)}
+                className="w-full p-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer shadow-sm text-center"
+                style={{ textAlignLast: 'center' }}
+              >
+                {memberships
+                  .filter(m => m && m.refrigerators && m.refrigerators.id)
+                  .map(m => (
+                    <option key={m.refrigerators.id} value={m.refrigerators.id}>
+                      {m.refrigerators.name}
+                    </option>
+                  ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
+                <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
               </div>
-            )}
+            </div>
           </div>
+        )}
 
-          {candidates.length > 0 && !selectedProduct && (
-            <div className="w-full max-w-md animate-slide-up">
-              <h2 className="text-lg font-bold text-gray-700 mb-3 ml-2">検索結果 ({candidates.length}件)</h2>
-              <div className="space-y-3">
-                {currentCandidates.map((cand, idx) => (
-                  <div key={idx} onClick={() => setSelectedProduct(cand)} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-blue-50 transition-colors">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={cand.image} className="w-16 h-16 object-contain bg-white rounded" alt={cand.name} />
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-sm line-clamp-2">{cand.name}</h3>
-                      <p className="text-xs text-gray-500 mt-1">タップして選択</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4 mt-6">
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-white border rounded-lg disabled:opacity-30 font-bold text-gray-600">&lt; 前へ</button>
-                  <span className="font-bold text-gray-600">{currentPage} / {totalPages}</span>
-                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-white border rounded-lg disabled:opacity-30 font-bold text-gray-600">次へ &gt;</button>
-                </div>
-              )}
-            </div>
-          )}
+        <div id="reader-hidden" className="hidden"></div>
 
-          {selectedProduct && (
-            <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 animate-slide-up relative">
-              <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕ 戻る</button>
-
-              <div className="text-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name} />
-                <h3 className="font-bold text-gray-800 mb-6">{selectedProduct.name}</h3>
-
-                <div className="mb-6">
-                  <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    <button onClick={() => setExpiryDate(getFutureDate(1))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">明日</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(3))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
-                  </div>
-                  <button
-                    onClick={() => setShowExpiryPicker(true)}
-                    aria-label="賞味期限を選択"
-                    className="w-full flex items-center gap-2 bg-gray-50 p-3 rounded-lg border-2 border-gray-300 hover:border-blue-500 transition-colors"
-                  >
-                    <span className="text-xl">📅</span>
-                    <span className="flex-1 text-left text-gray-700 font-bold">
-                      {expiryDate ? formatDateForDisplay(expiryDate) : '日付を選択'}
-                    </span>
-                  </button>
-                </div>
-
-                <button onClick={registerItem} className="w-full bg-green-500 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-600">完了 (在庫に追加)</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: 在庫 */}
-      {activeTab === 'inventory' && (
-        <div className="p-4 flex flex-col items-center animate-fade-in w-full">
-          <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
-
-          <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2">
-            {/* 検索エリア */}
-            <div className="grid grid-cols-2 gap-2">
-              {/* キーワード検索 */}
+        {dashboardError !== null ? (
+          <div className="p-6 flex flex-col items-center flex-1 w-full justify-center text-center">
+            <p className="text-red-500 font-bold mb-4">⚠️ {dashboardError}</p>
+            <button onClick={refreshData} className="px-6 py-3 bg-blue-100 text-blue-700 rounded-xl font-bold hover:bg-blue-200 transition-colors">
+              再読み込み
+            </button>
+          </div>
+        ) : memberships === null ? (
+          <div className="p-6 flex flex-col items-center flex-1 w-full justify-center">
+            <p className="text-gray-500 font-bold">データを読み込み中...</p>
+          </div>
+        ) : memberships.length === 0 ? (
+          <div className="p-6 flex flex-col items-center flex-1 w-full justify-center">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-sm w-full text-center">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">始めましょう！</h2>
+              <p className="text-sm text-gray-600 mb-6 font-bold">まずは、あなただけの冷蔵庫を作成してください。</p>
               <input
                 type="text"
-                value={inventorySearch}
-                onChange={(e) => setInventorySearch(e.target.value)}
-                placeholder="キーワード検索..."
-                className="p-3 border rounded-xl shadow-sm"
+                value={newRefName}
+                onChange={(e) => setNewRefName(e.target.value)}
+                placeholder="冷蔵庫の名前 (例: 自宅の冷蔵庫)"
+                className="w-full p-3 border rounded-xl mb-4"
               />
-
-              {/* 日付範囲検索ボタン */}
               <button
-                onClick={() => setShowDatePicker(true)}
-                className="p-3 border rounded-xl shadow-sm bg-white hover:bg-blue-50 font-bold text-gray-700 text-sm flex items-center justify-center gap-1"
+                onClick={createRefrigerator}
+                className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold shadow-md hover:bg-blue-700"
               >
-                📅 期限で検索
-                {(dateRangeStart || dateRangeEnd) && (
-                  <span className="text-xs text-blue-600">●</span>
-                )}
+                作成する
               </button>
             </div>
-
-            {/* フィルター・ソートエリア */}
-            <div className="flex gap-2 mb-2">
-              <select
-                aria-label="在庫の絞り込み"
-                value={filterOption}
-                onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
-                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
-              >
-                <option value="all">すべて表示</option>
-                <option value="expired">期限切れのみ</option>
-                <option value="unexpired">期限内のみ</option>
-              </select>
-
-              <select
-                aria-label="在庫の並べ替え"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
-                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
-              >
-                <option value="expiry_asc">期限が近い順</option>
-                <option value="created_desc">登録が新しい順</option>
-                <option value="created_asc">登録が古い順</option>
-                <option value="name_asc">名前順 (あいうえお順)</option>
-              </select>
-            </div>
-
-            {/* 選択中の日付範囲を表示 */}
-            {(dateRangeStart || dateRangeEnd) && (
-              <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
-                <span>
-                  {dateRangeStart && !dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 以降`}
-                  {!dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeEnd)} 以前`}
-                  {dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 〜 ${formatDateForDisplay(dateRangeEnd)}`}
-                </span>
-                <button
-                  onClick={() => {
-                    setDateRangeStart("");
-                    setDateRangeEnd("");
-                  }}
-                  className="text-red-500 hover:text-red-700 font-bold"
-                  aria-label="日付範囲フィルターを解除"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
           </div>
+        ) : (
+          <>
+            {/* TAB 1: 追加 */}
+            {activeTab === 'add' && (
+              <div className="p-6 flex flex-col items-center animate-fade-in w-full">
+                <h1 className="text-2xl font-bold mb-8 text-gray-800">🛍️ 商品を追加</h1>
 
-          <div className="w-full max-w-md space-y-3 mt-2">
-            {displayItems.map((item) => {
-              // NaNの場合は安全にfalseとして扱う
-              const todayTime = new Date().setHours(0, 0, 0, 0);
-              const isExpired = !isNaN(item._expiryTime) && item._expiryTime < todayTime;
+                <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+                  {!isScanning ? (
+                    <>
+                      <div className="flex gap-2 mb-6">
+                        <input type="text" value={inputCode} onChange={(e) => setInputCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchProduct()} placeholder="バーコード / 商品名" className="flex-1 p-3 border rounded-xl" />
+                        <button onClick={() => searchProduct()} disabled={loading} className="bg-blue-600 text-white px-6 rounded-xl font-bold">検索</button>
+                      </div>
+                      <div className="flex gap-3">
+                        <button onClick={() => setIsScanning(true)} className="flex-1 p-3 bg-blue-500 text-white rounded-xl font-bold">📷 カメラ</button>
+                        <label className="flex-1 flex justify-center p-3 bg-gray-100 border-2 border-dashed rounded-xl cursor-pointer font-bold text-gray-600">
+                          <span>📁 画像</span><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        </label>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <BarcodeScanner onResult={handleScanSuccess} />
+                      <button onClick={() => setIsScanning(false)} className="mt-6 text-gray-500 underline font-bold">キャンセル</button>
+                    </div>
+                  )}
+                </div>
 
-              let cardClass = "bg-white border-gray-200";
-              if (isExpired) cardClass = "bg-red-50 border-red-300";
+                {candidates.length > 0 && !selectedProduct && (
+                  <div className="w-full max-w-md animate-slide-up">
+                    <h2 className="text-lg font-bold text-gray-700 mb-3 ml-2">検索結果 ({candidates.length}件)</h2>
+                    <div className="space-y-3">
+                      {currentCandidates.map((cand, idx) => (
+                        <div key={idx} onClick={() => setSelectedProduct(cand)} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-blue-50 transition-colors">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={cand.image} className="w-16 h-16 object-contain bg-white rounded" alt={cand.name} />
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-800 text-sm line-clamp-2">{cand.name}</h3>
+                            <p className="text-xs text-gray-500 mt-1">タップして選択</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex justify-center items-center gap-4 mt-6">
+                        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-white border rounded-lg disabled:opacity-30 font-bold text-gray-600">&lt; 前へ</button>
+                        <span className="font-bold text-gray-600">{currentPage} / {totalPages}</span>
+                        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-white border rounded-lg disabled:opacity-30 font-bold text-gray-600">次へ &gt;</button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              return (
-                <div key={item.id} className={`${cardClass} p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-colors duration-300`}>
-                  <div className="flex items-center gap-4">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.image_url || "https://placehold.co/80x80"} className="w-16 h-16 object-cover rounded-lg bg-white" alt={item.name} />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-base truncate text-gray-800">{item.name}</h3>
-                      <p className="text-sm text-gray-800 opacity-90 mt-1 flex items-center gap-1">
-                        期限:
-                        <input
-                          type="date"
-                          value={item.expiry_date}
-                          onChange={(e) => updateExpiryDate(item.id, e.target.value)}
-                          aria-label={`${item.name}の賞味期限を編集`}
-                          className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
-                        />
-                        {isExpired && <span className="text-xs bg-red-500 text-white px-1 py-0.5 rounded ml-1 font-bold">期限切れ</span>}
-                      </p>
+                {selectedProduct && (
+                  <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 animate-slide-up relative">
+                    <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕ 戻る</button>
+
+                    <div className="text-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name} />
+                      <h3 className="font-bold text-gray-800 mb-6">{selectedProduct.name}</h3>
+
+                      <div className="mb-6">
+                        <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
+                        <div className="grid grid-cols-4 gap-2 mb-3">
+                          <button onClick={() => setExpiryDate(getFutureDate(1))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">明日</button>
+                          <button onClick={() => setExpiryDate(getFutureDate(3))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
+                          <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
+                          <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
+                        </div>
+                        <button
+                          onClick={() => setShowExpiryPicker(true)}
+                          aria-label="賞味期限を選択"
+                          className="w-full flex items-center gap-2 bg-gray-50 p-3 rounded-lg border-2 border-gray-300 hover:border-blue-500 transition-colors"
+                        >
+                          <span className="text-xl">📅</span>
+                          <span className="flex-1 text-left text-gray-700 font-bold">
+                            {expiryDate ? formatDateForDisplay(expiryDate) : '日付を選択'}
+                          </span>
+                        </button>
+                      </div>
+
+                      <button onClick={registerItem} className="w-full bg-green-500 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-600">完了 (在庫に追加)</button>
                     </div>
                   </div>
-                  <div className="flex gap-2 pt-2 border-t border-black/5">
-                    <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
-                    <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
-                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
-                  </div>
-                </div>
-              );
-            })}
-            {displayItems.length === 0 && (
-              <div className="text-center py-10 text-gray-400">
-                {inventorySearch ? "検索条件に一致する在庫がありません" : "表示する在庫がありません"}
+                )}
               </div>
             )}
-          </div>
+
+            {/* TAB 2: 在庫 */}
+            {activeTab === 'inventory' && (
+              <div className="p-4 flex flex-col items-center animate-fade-in w-full">
+                <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
+
+                <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2">
+                  {/* 検索エリア */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* キーワード検索 */}
+                    <input
+                      type="text"
+                      value={inventorySearch}
+                      onChange={(e) => setInventorySearch(e.target.value)}
+                      placeholder="キーワード検索..."
+                      className="p-3 border rounded-xl shadow-sm"
+                    />
+
+                    {/* 日付範囲検索ボタン */}
+                    <button
+                      onClick={() => setShowDatePicker(true)}
+                      className="p-3 border rounded-xl shadow-sm bg-white hover:bg-blue-50 font-bold text-gray-700 text-sm flex items-center justify-center gap-1"
+                    >
+                      📅 期限で検索
+                      {(dateRangeStart || dateRangeEnd) && (
+                        <span className="text-xs text-blue-600">●</span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* フィルター・ソートエリア */}
+                  <div className="flex gap-2 mb-2">
+                    <select
+                      aria-label="在庫の絞り込み"
+                      value={filterOption}
+                      onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
+                      className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                    >
+                      <option value="all">すべて表示</option>
+                      <option value="expired">期限切れのみ</option>
+                      <option value="unexpired">期限内のみ</option>
+                    </select>
+
+                    <select
+                      aria-label="在庫の並べ替え"
+                      value={sortOption}
+                      onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
+                      className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                    >
+                      <option value="expiry_asc">期限が近い順</option>
+                      <option value="created_desc">登録が新しい順</option>
+                      <option value="created_asc">登録が古い順</option>
+                      <option value="name_asc">名前順 (あいうえお順)</option>
+                    </select>
+                  </div>
+
+                  {/* 選択中の日付範囲を表示 */}
+                  {(dateRangeStart || dateRangeEnd) && (
+                    <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
+                      <span>
+                        {dateRangeStart && !dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 以降`}
+                        {!dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeEnd)} 以前`}
+                        {dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 〜 ${formatDateForDisplay(dateRangeEnd)}`}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setDateRangeStart("");
+                          setDateRangeEnd("");
+                        }}
+                        className="text-red-500 hover:text-red-700 font-bold"
+                        aria-label="日付範囲フィルターを解除"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-full max-w-md space-y-3 mt-2">
+                  {displayItems.map((item) => {
+                    // NaNの場合は安全にfalseとして扱う
+                    const todayTime = new Date().setHours(0, 0, 0, 0);
+                    const isExpired = !isNaN(item._expiryTime) && item._expiryTime < todayTime;
+
+                    let cardClass = "bg-white border-gray-200";
+                    if (isExpired) cardClass = "bg-red-50 border-red-300";
+
+                    return (
+                      <div key={item.id} className={`${cardClass} p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-colors duration-300`}>
+                        <div className="flex items-center gap-4">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.image_url || "https://placehold.co/80x80"} className="w-16 h-16 object-cover rounded-lg bg-white" alt={item.name} />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-base truncate text-gray-800">{item.name}</h3>
+                            <p className="text-sm text-gray-800 opacity-90 mt-1 flex items-center gap-1">
+                              期限:
+                              <input
+                                type="date"
+                                value={item.expiry_date}
+                                onChange={(e) => updateExpiryDate(item.id, e.target.value)}
+                                aria-label={`${item.name}の賞味期限を編集`}
+                                className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
+                              />
+                              {isExpired && <span className="text-xs bg-red-500 text-white px-1 py-0.5 rounded ml-1 font-bold">期限切れ</span>}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-2 border-t border-black/5">
+                          <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
+                          <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
+                          <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {displayItems.length === 0 && (
+                    <div className="text-center py-10 text-gray-400">
+                      {inventorySearch ? "検索条件に一致する在庫がありません" : "表示する在庫がありません"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* FOOTER */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-4 shadow z-50">
+          <button onClick={() => setActiveTab('add')} className={`flex-1 flex flex-col items-center ${activeTab === 'add' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">🛍️</span><span className="text-[10px] font-bold">追加</span></button>
+          <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center ${activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">📦</span><span className="text-[10px] font-bold">在庫</span></button>
         </div>
-      )}
 
-      {/* FOOTER */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-4 shadow z-50">
-        <button onClick={() => setActiveTab('add')} className={`flex-1 flex flex-col items-center ${activeTab === 'add' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">🛍️</span><span className="text-[10px] font-bold">追加</span></button>
-        <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center ${activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">📦</span><span className="text-[10px] font-bold">在庫</span></button>
-      </div>
+        {/* 日付範囲ピッカーモーダル */}
+        {showDatePicker && (
+          <DateRangePicker
+            startDate={dateRangeStart}
+            endDate={dateRangeEnd}
+            onStartDateChange={setDateRangeStart}
+            onEndDateChange={setDateRangeEnd}
+            onClose={() => setShowDatePicker(false)}
+          />
+        )}
 
-      {/* 日付範囲ピッカーモーダル */}
-      {showDatePicker && (
-        <DateRangePicker
-          startDate={dateRangeStart}
-          endDate={dateRangeEnd}
-          onStartDateChange={setDateRangeStart}
-          onEndDateChange={setDateRangeEnd}
-          onClose={() => setShowDatePicker(false)}
-        />
-      )}
-
-      {/* 賞味期限入力ドラムロールピッカー */}
-      {showExpiryPicker && (
-        <DrumRollDatePicker
-          initialDate={expiryDate ? parseLocalDate(expiryDate) : parseLocalDate(getFutureDate(7))}
-          onConfirm={(date) => {
-            setExpiryDate(getLocalDateString(date));
-            setShowExpiryPicker(false);
-          }}
-          onCancel={() => setShowExpiryPicker(false)}
-        />
-      )}
-    </main>
+        {/* 賞味期限入力ドラムロールピッカー */}
+        {showExpiryPicker && (
+          <DrumRollDatePicker
+            initialDate={expiryDate ? parseLocalDate(expiryDate) : parseLocalDate(getFutureDate(7))}
+            onConfirm={(date) => {
+              setExpiryDate(getLocalDateString(date));
+              setShowExpiryPicker(false);
+            }}
+            onCancel={() => setShowExpiryPicker(false)}
+          />
+        )}
+      </main>
+    </>
   );
 }
