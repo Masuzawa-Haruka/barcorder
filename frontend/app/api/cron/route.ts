@@ -81,8 +81,8 @@ export async function GET(request: Request) {
         )
       `)
             .eq('status', 'active')
-            .gte('expiration_date', startISO)
-            .lte('expiration_date', endISO);
+            .gte('expiration_date', startISO.slice(0, 10))
+            .lte('expiration_date', endISO.slice(0, 10));
 
         if (error) {
             throw error;

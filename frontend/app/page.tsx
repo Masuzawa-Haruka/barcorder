@@ -184,11 +184,17 @@ export default function Home() {
     if (!newRefName) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
 
       const res = await fetch(`${API_URL}/api/refrigerators`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader } as HeadersInit,
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ name: newRefName }),
       });
 

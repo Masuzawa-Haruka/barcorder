@@ -130,7 +130,7 @@ app.get('/api/dashboard', async (req, res) => {
         if (error) return res.status(500).json({ error: error.message });
         res.json(data);
     } catch (e) {
-        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('GET /api/dashboard エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -170,7 +170,7 @@ app.post('/api/refrigerators', async (req, res) => {
 
         res.status(201).json({ id: refId, name });
     } catch (e) {
-        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('POST /api/refrigerators エラー:', e);
         res.status(500).json({ error: 'サーバー内で予期せぬエラーが発生しました。' });
     }
@@ -218,7 +218,7 @@ app.get('/api/items', async (req, res) => {
 
         res.json(formattedData);
     } catch (e) {
-        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('GET /api/items エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -286,7 +286,7 @@ app.post('/api/items', async (req, res) => {
         }
         res.status(201).json(data[0]);
     } catch (e) {
-        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('POST /api/items エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -337,7 +337,7 @@ app.patch('/api/items/:id', async (req, res) => {
 
         res.json(data[0]);
     } catch (e) {
-        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('PATCH /api/items/:id エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
@@ -360,7 +360,7 @@ app.delete('/api/items/:id', async (req, res) => {
         if (error) return res.status(500).json({ error: error.message });
         res.status(204).send();
     } catch (e) {
-        if (e.name === 'AuthError') return res.status(401).json({ error: e.message });
+        if (e instanceof AuthError) return res.status(401).json({ error: e.message });
         console.error('DELETE /api/items/:id エラー:', e);
         res.status(500).json({ error: 'サーバーエラーが発生しました。' });
     }
