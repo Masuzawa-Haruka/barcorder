@@ -228,7 +228,12 @@ export default function Home() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
 
       const res = await fetch(`${API_URL}/api/items`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeader },
@@ -300,7 +305,12 @@ export default function Home() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
 
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
       const res = await fetch(`${API_URL}/api/items/${id}`, {
@@ -324,7 +334,12 @@ export default function Home() {
     if (!newDate) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const authHeader: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      if (!session) {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        router.push("/login");
+        return;
+      }
+      const authHeader: Record<string, string> = { Authorization: `Bearer ${session.access_token}` };
 
       const res = await fetch(`${API_URL}/api/items/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json", ...authHeader },

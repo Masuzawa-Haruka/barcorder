@@ -37,25 +37,24 @@ export async function GET(request: Request) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-        // 3. 「明日」の日付範囲を計算 (0:00:00 〜 23:59:59) - JST(Asia/Tokyo, UTC+9) 基準
-        // Vercel上の実行環境は基本UTCのため、そのまま new Date() を使うと「どのタイムゾーンの明日か」が曖昧になる。
-        // ここではJSTを基準とするため、UTC現在時刻に+9時間してJSTに変換し、その上で「明日0:00〜23:59:59」を算出し、
-        // 最後にUTCに戻してISO文字列（startISO/endISO）として扱う。
+        // 3. 「明日」の日付（JST, Asia/Tokyo, UTC+9）を `YYYY-MM-DD` 形式で算出する
         const nowUtc = new Date();
         const jstOffsetMs = 9 * 60 * 60 * 1000; // Asia/Tokyo はUTC+9で夏時間なし
         const nowJst = new Date(nowUtc.getTime() + jstOffsetMs);
+        const tomorrowJst = new Date(nowJst);
 
-        const tomorrowJstBase = new Date(nowJst);
-        tomorrowJstBase.setDate(tomorrowJstBase.getDate() + 1);
+        // nowJst は「JST相当の時刻」を表しているため、UTC系のゲッターを使うことでJSTの暦日を取得できる
+        tomorrowJst.setUTCDate(tomorrowJst.getUTCDate() + 1);
+        const year = tomorrowJst.getUTCFullYear();
+        const month = String(tomorrowJst.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(tomorrowJst.getUTCDate()).padStart(2, '0');
 
-        const tomorrowStartJst = new Date(tomorrowJstBase);
-        tomorrowStartJst.setHours(0, 0, 0, 0);
+        // JST基準の「明日」を `YYYY-MM-DD` で表現した文字列
+        const tomorrowJstDate = `${year}-${month}-${day}`;
 
-        const tomorrowEndJst = new Date(tomorrowJstBase);
-        tomorrowEndJst.setHours(23, 59, 59, 999);
-
-        const startISO = new Date(tomorrowStartJst.getTime() - jstOffsetMs).toISOString();
-        const endISO = new Date(tomorrowEndJst.getTime() - jstOffsetMs).toISOString();
+        // 既存コードとの互換性のため、startISO/endISO には同じ文字列を割り当てる
+        const startISO = tomorrowJstDate;
+        const endISO = tomorrowJstDate;
 
         // 4. 賞味期限が「明日」かつステータスが「active」のアイテムを抽出
         // 同時に、そのアイテムが属する冷蔵庫と、その冷蔵庫のメンバー（およびプロフィール）を取得する
