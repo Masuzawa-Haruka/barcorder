@@ -98,9 +98,17 @@ export default function Home() {
       setMemberships(dashData);
 
       let targetRefId = currentRefrigeratorId;
-      if (!targetRefId && dashData.length > 0) {
-        targetRefId = dashData[0].refrigerators.id;
-        setCurrentRefrigeratorId(targetRefId);
+      if (!targetRefId && Array.isArray(dashData) && dashData.length > 0) {
+        const firstWithRefrigerator = dashData.find(
+          (membership: any) =>
+            membership &&
+            membership.refrigerators &&
+            membership.refrigerators.id
+        );
+        if (firstWithRefrigerator && firstWithRefrigerator.refrigerators) {
+          targetRefId = firstWithRefrigerator.refrigerators.id;
+          setCurrentRefrigeratorId(targetRefId);
+        }
       }
 
       // 選択中の冷蔵庫があれば在庫を取得
@@ -516,11 +524,13 @@ export default function Home() {
                 className="w-full p-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer shadow-sm text-center"
                 style={{ textAlignLast: 'center' }}
               >
-                {memberships.map(m => (
-                  <option key={m.refrigerators.id} value={m.refrigerators.id}>
-                    {m.refrigerators.name}
-                  </option>
-                ))}
+                {memberships
+                  .filter(m => m && m.refrigerators && m.refrigerators.id)
+                  .map(m => (
+                    <option key={m.refrigerators.id} value={m.refrigerators.id}>
+                      {m.refrigerators.name}
+                    </option>
+                  ))}
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
                 <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
