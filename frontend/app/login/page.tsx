@@ -3,11 +3,19 @@ import { login, signup } from './actions';
 export default async function LoginPage({
     searchParams,
 }: {
-    searchParams: { error?: string, info?: string };
+    searchParams: { error?: string | string[]; info?: string | string[] };
 }) {
-    const error = searchParams?.error;
-    const info = searchParams?.info;
+    const normalizeSearchParam = (
+        param: string | string[] | undefined,
+    ): string | undefined => {
+        if (Array.isArray(param)) {
+            return param[0];
+        }
+        return param;
+    };
 
+    const error = normalizeSearchParam(searchParams?.error);
+    const info = normalizeSearchParam(searchParams?.info);
     return (
         <main className="flex min-h-screen bg-gray-50 flex-col pt-16 pb-24">
             {/* 簡易ヘッダー */}
