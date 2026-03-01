@@ -100,7 +100,7 @@ export default function Home() {
       let targetRefId = currentRefrigeratorId;
       if (!targetRefId && Array.isArray(dashData) && dashData.length > 0) {
         const firstWithRefrigerator = dashData.find(
-          (membership: any) =>
+          (membership: DashboardMembership) =>
             membership &&
             membership.refrigerators &&
             membership.refrigerators.id

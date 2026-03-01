@@ -20,11 +20,15 @@ const getAuthClient = (req) => {
     if (!authHeader) {
         throw new AuthError('認証ヘッダーが設定されていません');
     }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    if (!supabaseUrl) {
+        throw new Error('サーバー設定エラー：環境変数 SUPABASE_URL が未設定です。');
+    }
     const anonKey = process.env.SUPABASE_ANON_KEY;
     if (!anonKey) {
         throw new Error('サーバー設定エラー：環境変数 SUPABASE_ANON_KEY が未設定です。セキュリティ上の理由から、匿名キーによる接続のみ許可されています。');
     }
-    return createClient(process.env.SUPABASE_URL, anonKey, {
+    return createClient(supabaseUrl, anonKey, {
         global: {
             headers: {
                 Authorization: authHeader,
@@ -198,7 +202,12 @@ app.get('/api/items', async (req, res) => {
         const { data, error, status } = await authSupabase
             .from('inventory_items')
             .select(`
-                *,
+                id,
+                refrigerator_id,
+                barcode,
+                expiration_date,
+                status,
+                added_at,
                 products_master (
                     name,
                     image_url,

@@ -135,13 +135,22 @@ export async function GET(request: Request) {
         // 6. ユーザーごとに非同期で通知（メール送信やPush通知等）を実行
         const sendPromises = Object.entries(notificationsByUser).map(async ([userId, data]) => {
             // NOTE: ここに実際のメール送信API（ResendやSendGridなど）を呼び出す処理を実装します。
-            console.log(`[Mock Email] To UserID: ${userId} (${data.displayName} 様)`);
-            console.log(`[Mock Email] Subject: 【リマインダー】明日賞味期限切れになる商品があります`);
-            console.log(`[Mock Email] Body:`);
-            data.items.forEach(i => {
-                console.log(`  - ${i.productName} (場所: ${i.refrigeratorName})`);
-            });
-            console.log('--------------------------------------------------');
+            if (process.env.NODE_ENV === 'development') {
+                // 開発環境のみ、デバッグのために詳細なMockメール内容をログ出力する
+                console.log(`[Mock Email] To UserID: ${userId} (${data.displayName} 様)`);
+                console.log(`[Mock Email] Subject: 【リマインダー】明日賞味期限切れになる商品があります`);
+                console.log('[Mock Email] Body:');
+                data.items.forEach((i) => {
+                    console.log(`  - ${i.productName} (場所: ${i.refrigeratorName})`);
+                });
+                console.log('--------------------------------------------------');
+            } else {
+                // 本番等の環境では、個人情報・識別子を含まない簡易ログのみを出力する
+                console.log('[Cron] リマインダー送信処理を実行しました（Mock Email）。');
+                console.log(
+                    `[Cron] 対象ユーザー数: ${Object.keys(notificationsByUser).length}, 対象アイテム数: ${data.items.length}`
+                );
+            }
 
             return Promise.resolve();
         });
