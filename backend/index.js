@@ -24,9 +24,14 @@ const getAuthClient = (req) => {
     if (!supabaseUrl) {
         throw new Error('サーバー設定エラー：環境変数 SUPABASE_URL が未設定です。');
     }
-    const anonKey = process.env.SUPABASE_ANON_KEY;
+    const anonKeyEnv = process.env.SUPABASE_ANON_KEY;
+    const legacyKeyEnv = process.env.SUPABASE_KEY;
+    const anonKey = anonKeyEnv || legacyKeyEnv;
     if (!anonKey) {
-        throw new Error('サーバー設定エラー：環境変数 SUPABASE_ANON_KEY が未設定です。セキュリティ上の理由から、匿名キーによる接続のみ許可されています。');
+        throw new Error('サーバー設定エラー：環境変数 SUPABASE_ANON_KEY（または互換用 SUPABASE_KEY）が未設定です。セキュリティ上の理由から、匿名キーによる接続のみ許可されています。');
+    }
+    if (!anonKeyEnv && legacyKeyEnv) {
+        console.warn('警告：SUPABASE_ANON_KEY が未設定のため、互換性維持のために SUPABASE_KEY からフォールバックしてSupabaseに接続しています。今後のため SUPABASE_ANON_KEY への移行を検討してください。');
     }
     return createClient(supabaseUrl, anonKey, {
         global: {
