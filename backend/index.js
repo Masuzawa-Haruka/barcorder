@@ -387,7 +387,13 @@ app.patch('/api/items/:id', async (req, res) => {
             .eq('id', id)
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            // Supabase 側の認証・認可エラーは適切なHTTPステータスにマッピングする
+            if (error.status === 401 || error.status === 403) {
+                return res.status(error.status).json({ error: error.message });
+            }
+            return res.status(500).json({ error: error.message });
+        }
 
         if (!data || data.length === 0) {
             return res.status(404).json({ error: '指定されたIDのアイテムは存在しないか、権限がありません。' });
