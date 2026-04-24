@@ -36,7 +36,7 @@ const getDaysBadge = (days: number): { label: string; bgClass: string; textClass
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  const [activeTab, setActiveTab] = useState<'add' | 'inventory'>('add');
+  const [activeTab, setActiveTab] = useState<'add' | 'inventory' | 'history'>('add');
   const [items, setItems] = useState<InventoryItem[]>([]);
 
   const [inputCode, setInputCode] = useState("");
@@ -48,6 +48,8 @@ export default function Home() {
   const [showExpiryPicker, setShowExpiryPicker] = useState(false);
 
   const [filterOption, setFilterOption] = useState<'all' | 'expired' | 'unexpired'>('all');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'consumed' | 'discarded'>('all');
+  const [historySearch, setHistorySearch] = useState("");
   const [sortOption, setSortOption] = useState<'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc'>('expiry_asc');
 
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
@@ -272,6 +274,13 @@ export default function Home() {
       return 0;
     });
   }, [inventorySearch, items, dateRangeStart, dateRangeEnd, filterOption, sortOption]);
+
+  const historyItems = useMemo(() => {
+    let filtered = items.filter(item => item.status === 'consumed' || item.status === 'discarded');
+    if (historyFilter !== 'all') filtered = filtered.filter(item => item.status === historyFilter);
+    if (historySearch) filtered = filtered.filter(item => item.name.toLowerCase().includes(historySearch.toLowerCase()));
+    return filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [items, historyFilter, historySearch]);
 
   const currentCandidates = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -566,6 +575,80 @@ export default function Home() {
         </div>
       )}
 
+      {/* TAB 3: 履歴 */}
+      {activeTab === 'history' && (
+        <div className="p-4 flex flex-col items-center animate-fade-in w-full">
+
+          {/* 検索・フィルター */}
+          <div className="w-full max-w-md mb-3 space-y-2">
+            <input
+              type="text"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              placeholder="キーワード検索..."
+              className="w-full p-3 border border-gray-200 bg-white rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#5B7A34]/30"
+            />
+            <div className="flex gap-1 bg-white rounded-full border border-gray-200 p-1 shadow-sm">
+              {([
+                { value: 'all', label: 'すべて' },
+                { value: 'consumed', label: '完食' },
+                { value: 'discarded', label: '廃棄' },
+              ] as const).map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setHistoryFilter(value)}
+                  className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-colors ${historyFilter === value ? 'bg-[#5B7A34] text-white' : 'text-gray-400'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 履歴リスト */}
+          <div className="w-full max-w-md space-y-2">
+            {historyItems.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 text-sm">
+                {historySearch ? "検索条件に一致する履歴がありません" : "履歴がありません"}
+              </div>
+            ) : (
+              historyItems.map((item) => (
+                <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3 p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.image_url || "https://placehold.co/80x80?text=No+Image"}
+                    className="w-14 h-14 object-cover rounded-xl bg-gray-50 shrink-0"
+                    alt={item.name}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-sm text-gray-800 line-clamp-1">{item.name}</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">賞味期限: {formatDateForDisplay(item.expiry_date)}</p>
+                    <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${item.status === 'consumed' ? 'bg-[#EEF3E6] text-[#5B7A34]' : 'bg-red-50 text-red-400'}`}>
+                      {item.status === 'consumed' ? '完食' : '廃棄'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <button
+                      onClick={() => updateStatus(item.id, 'active')}
+                      className="text-[11px] font-bold text-[#5B7A34] bg-[#EEF3E6] px-3 py-1.5 rounded-full"
+                    >
+                      戻す
+                    </button>
+                    <button
+                      onClick={() => updateStatus(item.id, 'delete')}
+                      className="text-[11px] font-bold text-gray-300 hover:text-red-400 px-3 py-1.5 rounded-full text-center transition-colors"
+                      aria-label="完全に削除"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ボトムナビ */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-2 z-50">
         <button
@@ -585,6 +668,15 @@ export default function Home() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
           <span className="text-[10px] font-bold mt-0.5">在庫</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 flex flex-col items-center py-1 transition-colors ${activeTab === 'history' ? 'text-[#5B7A34]' : 'text-gray-400'}`}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-[10px] font-bold mt-0.5">履歴</span>
         </button>
       </div>
 
