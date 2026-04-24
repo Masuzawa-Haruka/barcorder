@@ -18,6 +18,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - ❌ `top-page`（`feature/` プレフィックス必須）
 - 派生元ブランチは `develop`
 
+### commit → push → PR フロー
+
+コードをコミットして push する際は以下の手順を自動で実行すること:
+
+1. コミット（既存のコミット規約に従う）
+2. `git push`（初回は `-u origin <branch>`）
+3. **初回 push 時のみ**、`gh pr create` で PR を自動作成（base: `develop`）
+
 ## プロジェクト概要
 
 バーコードスキャンによる家庭用品の賞味期限管理アプリ。JANコードをスキャンして商品情報を自動取得し、期限を記録・通知する。
@@ -85,6 +93,16 @@ backend/    Express.js (CommonJS) + Supabase クライアント
 ### データベース (Supabase)
 
 `items` テーブル: `id`, `user_id`, `barcode`, `name`, `image_url`, `expiry_date`, `status`('active'/'consumed'/'discarded'), `created_at`
+
+## 実装後の動作確認
+
+コードを書き終えたら必ず以下を実行すること:
+
+1. `npm run build`（またはビルドが不要な場合は `npm run lint`）でエラーがないことを確認
+2. 開発サーバーを起動し、実際に動作することをブラウザまたは API クライアントで確認
+3. 確認結果をユーザーに報告してから作業完了とする
+
+動作確認なしに「実装しました」と報告してはならない。
 
 ## コーディング規約
 
