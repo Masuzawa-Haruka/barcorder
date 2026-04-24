@@ -15,6 +15,24 @@ type InventoryItemWithParsedDates = InventoryItem & {
   _createdTime: number;
 };
 
+const getDaysRemaining = (expiryDate: string): number => {
+  if (!expiryDate) return NaN;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = parseLocalDate(expiryDate);
+  if (isNaN(expiry.getTime())) return NaN;
+  return Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getDaysBadge = (days: number): { label: string; bgClass: string; textClass: string } => {
+  if (isNaN(days)) return { label: '不明', bgClass: 'bg-gray-400', textClass: 'text-white' };
+  if (days < 0) return { label: '期限切れ', bgClass: 'bg-red-500', textClass: 'text-white' };
+  if (days === 0) return { label: '今日まで', bgClass: 'bg-red-400', textClass: 'text-white' };
+  if (days <= 3) return { label: `あと${days}日`, bgClass: 'bg-orange-400', textClass: 'text-white' };
+  if (days <= 7) return { label: `あと${days}日`, bgClass: 'bg-yellow-400', textClass: 'text-gray-800' };
+  return { label: `あと${days}日`, bgClass: 'bg-[#5B7A34]', textClass: 'text-white' };
+};
+
 export default function Home() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -29,15 +47,12 @@ export default function Home() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showExpiryPicker, setShowExpiryPicker] = useState(false);
 
-  // Filter & Sort State
   const [filterOption, setFilterOption] = useState<'all' | 'expired' | 'unexpired'>('all');
   const [sortOption, setSortOption] = useState<'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc'>('expiry_asc');
 
   const [candidates, setCandidates] = useState<ProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
-
   const [expiryDate, setExpiryDate] = useState("");
-
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [loading, setLoading] = useState(false);
@@ -59,9 +74,7 @@ export default function Home() {
   useEffect(() => { refreshData(); }, [activeTab, refreshData]);
 
   useEffect(() => {
-    if (selectedProduct) {
-      setExpiryDate(getFutureDate(7));
-    }
+    if (selectedProduct) setExpiryDate(getFutureDate(7));
   }, [selectedProduct]);
 
   const searchProduct = async (codeOverride?: string) => {
@@ -92,7 +105,6 @@ export default function Home() {
 
       if (uniqueItems.length === 0) alert("商品が見つかりませんでした");
       else setCandidates(uniqueItems);
-
     } catch (error) {
       console.error(error);
       alert("検索エラーが発生しました");
@@ -134,42 +146,23 @@ export default function Home() {
 
       if (!res.ok) {
         let errorMsg = "もう一度お試しください。";
-        // レスポンス本文を外側の変数に保持して、catch内でも参照できるようにする
         let text = "";
         let trimmed = "";
         try {
-          // res.json() と res.text() の2重読み取りを防ぐため、先にテキストとして取得する
           text = await res.text();
           trimmed = text.trim();
-
           if (trimmed) {
-            // HTMLかどうか先に判定（大文字・小文字を無視して判定）
-            if (
-              trimmed.toLowerCase().startsWith("<!doctype") ||
-              trimmed.toLowerCase().startsWith("<html")
-            ) {
-              errorMsg = "サーバーから予期しない形式のエラーレスポンス（HTML）が返されました。";
-              console.error("Unexpected HTML error response:", text);
+            if (trimmed.toLowerCase().startsWith("<!doctype") || trimmed.toLowerCase().startsWith("<html")) {
+              errorMsg = "サーバーから予期しないレスポンスが返されました。";
             } else {
-              // HTMLでなければJSONとして解析を試みる
               const errData = JSON.parse(trimmed) as { error?: string };
-              if (errData && errData.error) {
-                errorMsg = `原因: ${errData.error}`;
-                console.error("API Error Details:", errData.error);
-              }
+              if (errData && errData.error) errorMsg = `原因: ${errData.error}`;
             }
           }
         } catch (e) {
-          // JSONパースエラーなど、レスポンス形式に起因するエラーとその他を分類する
-          if (e instanceof SyntaxError) {
-            errorMsg = "サーバーから無効な形式のレスポンス（JSON解析に失敗）が返されました。";
-            console.error("Failed to parse error response as JSON. Raw response text:", trimmed || text);
-          } else {
-            errorMsg = "サーバーのエラーレスポンス処理中に予期しないエラーが発生しました。詳細はコンソールをご確認ください。";
-            console.error("Error processing error response:", e, "Raw response text:", trimmed || text);
-          }
+          if (e instanceof SyntaxError) errorMsg = "サーバーから無効な形式のレスポンスが返されました。";
+          else errorMsg = "サーバーのエラーレスポンス処理中にエラーが発生しました。";
         }
-
         alert(`登録に失敗しました。\n${errorMsg}`);
         return;
       }
@@ -187,19 +180,13 @@ export default function Home() {
 
   const updateStatus = async (id: string, newStatus: string) => {
     if (newStatus === 'delete' && !confirm("完全に削除しますか?")) return;
-
     try {
       const method = newStatus === 'delete' ? 'DELETE' : 'PATCH';
       const res = await fetch(`${API_URL}/api/items/${id}`, {
         method, headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-
-      if (!res.ok) {
-        alert("更新に失敗しました。もう一度お試しください。");
-        return;
-      }
-
+      if (!res.ok) { alert("更新に失敗しました。もう一度お試しください。"); return; }
       refreshData();
     } catch (error) {
       console.error(error);
@@ -214,12 +201,7 @@ export default function Home() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expiry_date: newDate }),
       });
-
-      if (!res.ok) {
-        alert("期限の更新に失敗しました。");
-        return;
-      }
-
+      if (!res.ok) { alert("期限の更新に失敗しました。"); return; }
       refreshData();
     } catch (e) {
       console.error(e);
@@ -228,7 +210,6 @@ export default function Home() {
   };
 
   const displayItems = useMemo(() => {
-    // 1. 日付のパース関連処理を一度だけ行い、パース済みのプロパティを付与する (Copilot 警告対応・計算量削減)
     let filtered: InventoryItemWithParsedDates[] = items
       .filter(item => item.status === 'active')
       .map(item => ({
@@ -237,50 +218,26 @@ export default function Home() {
         _createdTime: new Date(item.created_at).getTime()
       }));
 
-    // 本日の0時を表すタイムスタンプ (全フィルター・ソートで共通利用)
     const todayTime = new Date().setHours(0, 0, 0, 0);
 
     const warnInvalidDate = (item: InventoryItemWithParsedDates, context: string) => {
-      console.warn(`不正な有効期限のためアイテムを${context}から除外しました`, {
-        id: item.id,
-        expiry_date: item.expiry_date,
-      });
+      console.warn(`不正な有効期限のためアイテムを${context}から除外しました`, { id: item.id, expiry_date: item.expiry_date });
     };
 
     if (inventorySearch) {
       filtered = filtered.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
     }
 
-    // 日付範囲でフィルタリング (片方のみの指定も許可)
     if (dateRangeStart || dateRangeEnd) {
       let start: Date | null = null;
       let end: Date | null = null;
-
-      if (dateRangeStart) {
-        start = new Date(dateRangeStart);
-        if (isNaN(start.getTime())) start = null;
-        else start.setHours(0, 0, 0, 0);
-      }
-
-      if (dateRangeEnd) {
-        end = new Date(dateRangeEnd);
-        if (isNaN(end.getTime())) end = null;
-        else end.setHours(23, 59, 59, 999);
-      }
-
+      if (dateRangeStart) { start = new Date(dateRangeStart); if (isNaN(start.getTime())) start = null; else start.setHours(0, 0, 0, 0); }
+      if (dateRangeEnd) { end = new Date(dateRangeEnd); if (isNaN(end.getTime())) end = null; else end.setHours(23, 59, 59, 999); }
       if (start && end && start > end) {
-        // 開始日と終了日の大小関係チェック（開始日が終了日より後の場合はフィルタリングを行わない）
-        console.warn("日付範囲が不正なためフィルタリングをスキップします", {
-          start,
-          end,
-        });
+        console.warn("日付範囲が不正なためフィルタリングをスキップします", { start, end });
       } else if (start || end) {
         filtered = filtered.filter(item => {
-          if (isNaN(item._expiryTime)) {
-            warnInvalidDate(item, "日付範囲検索");
-            return false;
-          }
-
+          if (isNaN(item._expiryTime)) { warnInvalidDate(item, "日付範囲検索"); return false; }
           if (start && item._expiryTime < start.getTime()) return false;
           if (end && item._expiryTime > end.getTime()) return false;
           return true;
@@ -288,58 +245,31 @@ export default function Home() {
       }
     }
 
-    // 絞り込み (フィルター)
     if (filterOption === 'expired') {
-      filtered = filtered.filter(item => {
-        if (isNaN(item._expiryTime)) {
-          warnInvalidDate(item, "期限切れフィルター");
-          return false;
-        }
-        return item._expiryTime < todayTime;
-      });
+      filtered = filtered.filter(item => { if (isNaN(item._expiryTime)) { warnInvalidDate(item, "期限切れフィルター"); return false; } return item._expiryTime < todayTime; });
     } else if (filterOption === 'unexpired') {
-      filtered = filtered.filter(item => {
-        if (isNaN(item._expiryTime)) {
-          warnInvalidDate(item, "期限内フィルター");
-          return false;
-        }
-        return item._expiryTime >= todayTime;
-      });
+      filtered = filtered.filter(item => { if (isNaN(item._expiryTime)) { warnInvalidDate(item, "期限内フィルター"); return false; } return item._expiryTime >= todayTime; });
     }
 
-    // 並べ替え (ソート)
     return filtered.sort((a, b) => {
       if (sortOption === 'expiry_asc') {
-        const dateA = a._expiryTime;
-        const dateB = b._expiryTime;
-        const isInvalidA = isNaN(dateA);
-        const isInvalidB = isNaN(dateB);
+        const isInvalidA = isNaN(a._expiryTime), isInvalidB = isNaN(b._expiryTime);
         if (isInvalidA && isInvalidB) return 0;
-        if (isInvalidA) return 1; // 不正な日付は後ろへ
+        if (isInvalidA) return 1;
         if (isInvalidB) return -1;
-        return dateA - dateB;
+        return a._expiryTime - b._expiryTime;
       } else if (sortOption === 'created_desc') {
-        const timeA = a._createdTime;
-        const timeB = b._createdTime;
-        const isInvalidA = isNaN(timeA);
-        const isInvalidB = isNaN(timeB);
-        if (isInvalidA && isInvalidB) return 0;
-        if (isInvalidA) return 1;
-        if (isInvalidB) return -1;
-        return timeB - timeA;
+        const isInvalidA = isNaN(a._createdTime), isInvalidB = isNaN(b._createdTime);
+        if (isInvalidA && isInvalidB) return 0; if (isInvalidA) return 1; if (isInvalidB) return -1;
+        return b._createdTime - a._createdTime;
       } else if (sortOption === 'created_asc') {
-        const timeA = a._createdTime;
-        const timeB = b._createdTime;
-        const isInvalidA = isNaN(timeA);
-        const isInvalidB = isNaN(timeB);
-        if (isInvalidA && isInvalidB) return 0;
-        if (isInvalidA) return 1;
-        if (isInvalidB) return -1;
-        return timeA - timeB;
+        const isInvalidA = isNaN(a._createdTime), isInvalidB = isNaN(b._createdTime);
+        if (isInvalidA && isInvalidB) return 0; if (isInvalidA) return 1; if (isInvalidB) return -1;
+        return a._createdTime - b._createdTime;
       } else if (sortOption === 'name_asc') {
         return a.name.localeCompare(b.name, 'ja');
       }
-      return 0; // default (発生しないはず)
+      return 0;
     });
   }, [inventorySearch, items, dateRangeStart, dateRangeEnd, filterOption, sortOption]);
 
@@ -351,103 +281,158 @@ export default function Home() {
   const totalPages = Math.ceil(candidates.length / itemsPerPage);
 
   return (
-    <main className="flex flex-col min-h-screen bg-gray-50 pt-16 pb-24">
-      <header className="w-full shadow-md flex items-center px-4 py-2 sticky top-0 z-30 bg-white">
+    <main className="flex flex-col min-h-screen bg-[#F5F2EC] pt-14 pb-20">
+      {/* ヘッダー */}
+      <header className="w-full bg-white flex items-center px-4 py-2 fixed top-0 z-30 border-b border-gray-200">
         <Image
           src="/icon.png"
-          alt="Scan & Track Logo"
-          width={48}
-          height={48}
-          className="w-auto h-12 object-contain"
+          alt="BarCorder"
+          width={40}
+          height={40}
+          className="w-auto h-10 object-contain"
           priority
         />
+        <span className="ml-2 font-bold text-[#5B7A34] text-lg tracking-tight">BarCorder</span>
       </header>
 
       <div id="reader-hidden" className="hidden"></div>
 
-      {/* TAB 1: 追加 */}
+      {/* TAB 1: 商品追加 */}
       {activeTab === 'add' && (
-        <div className="p-6 flex flex-col items-center animate-fade-in w-full">
-          <h1 className="text-2xl font-bold mb-8 text-gray-800">🛍️ 商品を追加</h1>
+        <div className="p-4 flex flex-col items-center animate-fade-in w-full">
 
-          <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
-            {!isScanning ? (
-              <>
-                <div className="flex gap-2 mb-6">
-                  <input type="text" value={inputCode} onChange={(e) => setInputCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchProduct()} placeholder="バーコード / 商品名" className="flex-1 p-3 border rounded-xl" />
-                  <button onClick={() => searchProduct()} disabled={loading} className="bg-blue-600 text-white px-6 rounded-xl font-bold">検索</button>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={() => setIsScanning(true)} className="flex-1 p-3 bg-blue-500 text-white rounded-xl font-bold">📷 カメラ</button>
-                  <label className="flex-1 flex justify-center p-3 bg-gray-100 border-2 border-dashed rounded-xl cursor-pointer font-bold text-gray-600">
-                    <span>📁 画像</span><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                  </label>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center">
-                <BarcodeScanner onResult={handleScanSuccess} />
-                <button onClick={() => setIsScanning(false)} className="mt-6 text-gray-500 underline font-bold">キャンセル</button>
-              </div>
-            )}
-          </div>
-
-          {candidates.length > 0 && !selectedProduct && (
-            <div className="w-full max-w-md animate-slide-up">
-              <h2 className="text-lg font-bold text-gray-700 mb-3 ml-2">検索結果 ({candidates.length}件)</h2>
-              <div className="space-y-3">
-                {currentCandidates.map((cand, idx) => (
-                  <div key={idx} onClick={() => setSelectedProduct(cand)} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-blue-50 transition-colors">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={cand.image} className="w-16 h-16 object-contain bg-white rounded" alt={cand.name} />
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-sm line-clamp-2">{cand.name}</h3>
-                      <p className="text-xs text-gray-500 mt-1">タップして選択</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4 mt-6">
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-white border rounded-lg disabled:opacity-30 font-bold text-gray-600">&lt; 前へ</button>
-                  <span className="font-bold text-gray-600">{currentPage} / {totalPages}</span>
-                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-white border rounded-lg disabled:opacity-30 font-bold text-gray-600">次へ &gt;</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {selectedProduct && (
-            <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 animate-slide-up relative">
-              <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕ 戻る</button>
-
-              <div className="text-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedProduct.image} className="w-32 h-32 object-contain mx-auto mb-4" alt={selectedProduct.name} />
-                <h3 className="font-bold text-gray-800 mb-6">{selectedProduct.name}</h3>
-
-                <div className="mb-6">
-                  <p className="text-sm font-bold text-gray-500 mb-2 text-left">賞味期限を決める (任意)</p>
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    <button onClick={() => setExpiryDate(getFutureDate(1))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">明日</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(3))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">3日後</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(7))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1週間</button>
-                    <button onClick={() => setExpiryDate(getFutureDate(30))} className="px-1 py-2 bg-gray-100 rounded text-xs font-bold hover:bg-blue-100 text-gray-600">1ヶ月</button>
-                  </div>
+          {!isScanning ? (
+            <>
+              {/* 検索エリア */}
+              <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+                <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">バーコード・商品名で検索</p>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={inputCode}
+                    onChange={(e) => setInputCode(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && searchProduct()}
+                    placeholder="バーコード / 商品名"
+                    className="flex-1 p-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5B7A34]/30"
+                  />
                   <button
-                    onClick={() => setShowExpiryPicker(true)}
-                    aria-label="賞味期限を選択"
-                    className="w-full flex items-center gap-2 bg-gray-50 p-3 rounded-lg border-2 border-gray-300 hover:border-blue-500 transition-colors"
+                    onClick={() => searchProduct()}
+                    disabled={loading}
+                    className="bg-[#5B7A34] text-white px-5 rounded-full font-bold text-sm disabled:opacity-50"
                   >
-                    <span className="text-xl">📅</span>
-                    <span className="flex-1 text-left text-gray-700 font-bold">
-                      {expiryDate ? formatDateForDisplay(expiryDate) : '日付を選択'}
-                    </span>
+                    {loading ? "..." : "検索"}
                   </button>
                 </div>
-
-                <button onClick={registerItem} className="w-full bg-green-500 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-600">完了 (在庫に追加)</button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsScanning(true)}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#5B7A34] text-white rounded-full font-bold text-sm"
+                  >
+                    <span>📷</span> カメラで読む
+                  </button>
+                  <label className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#EEF3E6] text-[#5B7A34] rounded-full font-bold text-sm cursor-pointer border border-[#5B7A34]/20">
+                    <span>📁</span> 画像から
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                </div>
               </div>
+
+              {/* 検索候補リスト */}
+              {candidates.length > 0 && !selectedProduct && (
+                <div className="w-full max-w-md animate-slide-up">
+                  <p className="text-xs font-bold text-gray-400 mb-2 ml-1">検索結果 {candidates.length}件</p>
+                  <div className="space-y-2">
+                    {currentCandidates.map((cand, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedProduct(cand)}
+                        className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-3 cursor-pointer active:bg-[#EEF3E6] transition-colors"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={cand.image} className="w-14 h-14 object-contain bg-gray-50 rounded-lg" alt={cand.name} />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-gray-800 text-sm line-clamp-2">{cand.name}</h3>
+                          <p className="text-xs text-gray-400 mt-0.5">タップして選択</p>
+                        </div>
+                        <span className="text-gray-300 text-lg">›</span>
+                      </div>
+                    ))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-4 mt-4">
+                      <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-white border rounded-full text-sm disabled:opacity-30 font-bold text-gray-600">‹ 前へ</button>
+                      <span className="text-sm font-bold text-gray-500">{currentPage} / {totalPages}</span>
+                      <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-white border rounded-full text-sm disabled:opacity-30 font-bold text-gray-600">次へ ›</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 商品登録フォーム */}
+              {selectedProduct && (
+                <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 animate-slide-up overflow-hidden">
+                  {/* 商品ヘッダー */}
+                  <div className="flex items-center gap-3 p-4 border-b border-gray-100">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedProduct.image} className="w-16 h-16 object-contain bg-gray-50 rounded-xl" alt={selectedProduct.name} />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-gray-800 text-sm line-clamp-2">{selectedProduct.name}</h3>
+                    </div>
+                    <button onClick={() => setSelectedProduct(null)} className="text-gray-300 hover:text-gray-500 text-xl font-bold p-1">✕</button>
+                  </div>
+
+                  {/* 賞味期限 */}
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 mb-2">賞味期限</p>
+                    <div className="grid grid-cols-4 gap-1.5 mb-2">
+                      {[
+                        { label: '明日', days: 1 },
+                        { label: '3日後', days: 3 },
+                        { label: '1週間', days: 7 },
+                        { label: '1ヶ月', days: 30 },
+                      ].map(({ label, days }) => (
+                        <button
+                          key={days}
+                          onClick={() => setExpiryDate(getFutureDate(days))}
+                          className={`py-2 rounded-full text-xs font-bold transition-colors ${expiryDate === getFutureDate(days) ? 'bg-[#5B7A34] text-white' : 'bg-[#EEF3E6] text-[#5B7A34]'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setShowExpiryPicker(true)}
+                      className="w-full flex items-center gap-2 bg-gray-50 p-3 rounded-xl border border-gray-200"
+                    >
+                      <span>📅</span>
+                      <span className="flex-1 text-left text-gray-700 text-sm font-bold">
+                        {expiryDate ? formatDateForDisplay(expiryDate) : '日付を選択'}
+                      </span>
+                      <span className="text-gray-300">›</span>
+                    </button>
+                  </div>
+
+                  {/* 登録ボタン */}
+                  <div className="p-4">
+                    <button
+                      onClick={registerItem}
+                      className="w-full bg-[#5B7A34] text-white py-3.5 rounded-full font-bold shadow-sm text-sm"
+                    >
+                      登録する
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <BarcodeScanner onResult={handleScanSuccess} />
+              <button
+                onClick={() => setIsScanning(false)}
+                className="mt-4 w-full py-3 text-gray-500 border border-gray-200 rounded-full font-bold text-sm"
+              >
+                キャンセル
+              </button>
             </div>
           )}
         </div>
@@ -456,130 +441,151 @@ export default function Home() {
       {/* TAB 2: 在庫 */}
       {activeTab === 'inventory' && (
         <div className="p-4 flex flex-col items-center animate-fade-in w-full">
-          <h1 className="text-2xl font-bold mb-4 text-gray-800">📦 冷蔵庫の中身</h1>
 
-          <div className="w-full max-w-md sticky top-0 z-10 bg-gray-50 pb-2 space-y-2">
-            {/* 検索エリア */}
-            <div className="grid grid-cols-2 gap-2">
-              {/* キーワード検索 */}
+          {/* 検索・フィルターバー */}
+          <div className="w-full max-w-md mb-3 space-y-2">
+            <div className="flex gap-2">
               <input
                 type="text"
                 value={inventorySearch}
                 onChange={(e) => setInventorySearch(e.target.value)}
                 placeholder="キーワード検索..."
-                className="p-3 border rounded-xl shadow-sm"
+                className="flex-1 p-3 border border-gray-200 bg-white rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#5B7A34]/30"
               />
-
-              {/* 日付範囲検索ボタン */}
               <button
                 onClick={() => setShowDatePicker(true)}
-                className="p-3 border rounded-xl shadow-sm bg-white hover:bg-blue-50 font-bold text-gray-700 text-sm flex items-center justify-center gap-1"
+                className={`flex items-center gap-1 px-4 py-2 rounded-full text-sm font-bold border shadow-sm ${(dateRangeStart || dateRangeEnd) ? 'bg-[#5B7A34] text-white border-[#5B7A34]' : 'bg-white text-gray-600 border-gray-200'}`}
               >
-                📅 期限で検索
-                {(dateRangeStart || dateRangeEnd) && (
-                  <span className="text-xs text-blue-600">●</span>
-                )}
+                📅{(dateRangeStart || dateRangeEnd) && <span className="text-[10px]">●</span>}
               </button>
             </div>
 
-            {/* フィルター・ソートエリア */}
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2">
               <select
                 aria-label="在庫の絞り込み"
                 value={filterOption}
                 onChange={(e) => setFilterOption(e.target.value as 'all' | 'expired' | 'unexpired')}
-                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                className="flex-1 p-2 border border-gray-200 rounded-full bg-white text-sm text-gray-700 font-bold focus:outline-none"
               >
-                <option value="all">すべて表示</option>
+                <option value="all">すべて</option>
                 <option value="expired">期限切れのみ</option>
                 <option value="unexpired">期限内のみ</option>
               </select>
-
               <select
                 aria-label="在庫の並べ替え"
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as 'expiry_asc' | 'created_desc' | 'created_asc' | 'name_asc')}
-                className="flex-1 p-2 border rounded-xl shadow-sm bg-white text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                className="flex-1 p-2 border border-gray-200 rounded-full bg-white text-sm text-gray-700 font-bold focus:outline-none"
               >
                 <option value="expiry_asc">期限が近い順</option>
                 <option value="created_desc">登録が新しい順</option>
                 <option value="created_asc">登録が古い順</option>
-                <option value="name_asc">名前順 (あいうえお順)</option>
+                <option value="name_asc">名前順</option>
               </select>
             </div>
 
-            {/* 選択中の日付範囲を表示 */}
             {(dateRangeStart || dateRangeEnd) && (
-              <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg flex items-center justify-between">
+              <div className="text-xs text-[#5B7A34] bg-[#EEF3E6] px-3 py-2 rounded-full flex items-center justify-between">
                 <span>
                   {dateRangeStart && !dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 以降`}
                   {!dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeEnd)} 以前`}
                   {dateRangeStart && dateRangeEnd && `${formatDateForDisplay(dateRangeStart)} 〜 ${formatDateForDisplay(dateRangeEnd)}`}
                 </span>
-                <button
-                  onClick={() => {
-                    setDateRangeStart("");
-                    setDateRangeEnd("");
-                  }}
-                  className="text-red-500 hover:text-red-700 font-bold"
-                  aria-label="日付範囲フィルターを解除"
-                >
-                  ✕
-                </button>
+                <button onClick={() => { setDateRangeStart(""); setDateRangeEnd(""); }} className="text-red-400 font-bold ml-2">✕</button>
               </div>
             )}
           </div>
 
-          <div className="w-full max-w-md space-y-3 mt-2">
-            {displayItems.map((item) => {
-              // NaNの場合は安全にfalseとして扱う
-              const todayTime = new Date().setHours(0, 0, 0, 0);
-              const isExpired = !isNaN(item._expiryTime) && item._expiryTime < todayTime;
+          {/* 在庫グリッド */}
+          <div className="w-full max-w-md">
+            {displayItems.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 text-sm">
+                {inventorySearch ? "検索条件に一致する在庫がありません" : "在庫がありません"}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {displayItems.map((item) => {
+                  const days = getDaysRemaining(item.expiry_date);
+                  const badge = getDaysBadge(days);
 
-              let cardClass = "bg-white border-gray-200";
-              if (isExpired) cardClass = "bg-red-50 border-red-300";
+                  return (
+                    <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                      {/* 商品画像 + バッジ */}
+                      <div className="relative bg-gray-50 aspect-square">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.image_url || "https://placehold.co/200x200?text=No+Image"}
+                          className="w-full h-full object-contain p-2"
+                          alt={item.name}
+                        />
+                        <span className={`absolute top-2 left-2 ${badge.bgClass} ${badge.textClass} text-[10px] font-bold px-2 py-0.5 rounded-full`}>
+                          {badge.label}
+                        </span>
+                      </div>
 
-              return (
-                <div key={item.id} className={`${cardClass} p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-colors duration-300`}>
-                  <div className="flex items-center gap-4">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.image_url || "https://placehold.co/80x80"} className="w-16 h-16 object-cover rounded-lg bg-white" alt={item.name} />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-base truncate text-gray-800">{item.name}</h3>
-                      <p className="text-sm text-gray-800 opacity-90 mt-1 flex items-center gap-1">
-                        期限:
+                      {/* 商品情報 */}
+                      <div className="p-2 flex-1">
+                        <h3 className="font-bold text-xs text-gray-800 line-clamp-2 leading-tight">{item.name}</h3>
                         <input
                           type="date"
                           value={item.expiry_date}
                           onChange={(e) => updateExpiryDate(item.id, e.target.value)}
                           aria-label={`${item.name}の賞味期限を編集`}
-                          className={`bg-transparent font-bold ml-1 cursor-pointer hover:bg-black/5 rounded px-1 ${isExpired ? 'text-red-600' : ''}`}
+                          className="mt-1 text-[11px] text-gray-400 bg-transparent cursor-pointer w-full"
                         />
-                        {isExpired && <span className="text-xs bg-red-500 text-white px-1 py-0.5 rounded ml-1 font-bold">期限切れ</span>}
-                      </p>
+                      </div>
+
+                      {/* アクションボタン */}
+                      <div className="flex border-t border-gray-100">
+                        <button
+                          onClick={() => updateStatus(item.id, 'consumed')}
+                          className="flex-1 py-2 text-[11px] text-[#5B7A34] font-bold hover:bg-[#EEF3E6] transition-colors"
+                        >
+                          完食
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'discarded')}
+                          className="flex-1 py-2 text-[11px] text-red-400 font-bold border-l border-gray-100 hover:bg-red-50 transition-colors"
+                        >
+                          廃棄
+                        </button>
+                        <button
+                          onClick={() => updateStatus(item.id, 'delete')}
+                          className="w-9 flex items-center justify-center text-gray-300 hover:text-red-400 border-l border-gray-100 transition-colors"
+                          aria-label="削除"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-2 pt-2 border-t border-black/5">
-                    <button onClick={() => updateStatus(item.id, 'consumed')} className="flex-1 bg-green-100 text-green-800 hover:bg-green-200 py-2 rounded-lg font-bold">😋 完食</button>
-                    <button onClick={() => updateStatus(item.id, 'discarded')} className="flex-1 bg-red-100 text-red-800 hover:bg-red-200 py-2 rounded-lg font-bold">😱 廃棄</button>
-                    <button onClick={() => updateStatus(item.id, 'delete')} className="w-10 flex items-center justify-center text-gray-400 hover:text-red-500" aria-label="削除">🗑️</button>
-                  </div>
-                </div>
-              );
-            })}
-            {displayItems.length === 0 && (
-              <div className="text-center py-10 text-gray-400">
-                {inventorySearch ? "検索条件に一致する在庫がありません" : "表示する在庫がありません"}
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* FOOTER */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-4 shadow z-50">
-        <button onClick={() => setActiveTab('add')} className={`flex-1 flex flex-col items-center ${activeTab === 'add' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">🛍️</span><span className="text-[10px] font-bold">追加</span></button>
-        <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center ${activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400'}`}><span className="text-2xl">📦</span><span className="text-[10px] font-bold">在庫</span></button>
+      {/* ボトムナビ */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-2 z-50">
+        <button
+          onClick={() => setActiveTab('add')}
+          className={`flex-1 flex flex-col items-center py-1 transition-colors ${activeTab === 'add' ? 'text-[#5B7A34]' : 'text-gray-400'}`}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          <span className="text-[10px] font-bold mt-0.5">ホーム</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('inventory')}
+          className={`flex-1 flex flex-col items-center py-1 transition-colors ${activeTab === 'inventory' ? 'text-[#5B7A34]' : 'text-gray-400'}`}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <span className="text-[10px] font-bold mt-0.5">在庫</span>
+        </button>
       </div>
 
       {/* 日付範囲ピッカーモーダル */}
