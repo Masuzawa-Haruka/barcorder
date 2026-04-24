@@ -497,13 +497,13 @@ export default function Home() {
           </div>
 
           {/* 在庫グリッド */}
-          <div className="w-full max-w-md">
+          <div className="w-full max-w-md sm:max-w-2xl lg:max-w-5xl">
             {displayItems.length === 0 ? (
               <div className="text-center py-16 text-gray-400 text-sm">
                 {inventorySearch ? "検索条件に一致する在庫がありません" : "在庫がありません"}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {displayItems.map((item) => {
                   const days = getDaysRemaining(item.expiry_date);
                   const badge = getDaysBadge(days);
@@ -511,11 +511,11 @@ export default function Home() {
                   return (
                     <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
                       {/* 商品画像 + バッジ */}
-                      <div className="relative bg-gray-50 aspect-square">
+                      <div className="relative bg-gray-50 aspect-square overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={item.image_url || "https://placehold.co/200x200?text=No+Image"}
-                          className="w-full h-full object-contain p-2"
+                          className="absolute inset-0 w-full h-full object-cover"
                           alt={item.name}
                         />
                         <span className={`absolute top-2 left-2 ${badge.bgClass} ${badge.textClass} text-[10px] font-bold px-2 py-0.5 rounded-full`}>
