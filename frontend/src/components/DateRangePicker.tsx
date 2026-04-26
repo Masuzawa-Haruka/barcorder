@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { DrumRollDatePicker } from "./DrumRollDatePicker";
-import { formatDateForDisplay, getLocalDateString, parseLocalDate } from "../utils/dateUtils";
+import { formatDateForDisplay, getLocalDateString, parseLocalDate } from "@/lib/dateUtils";
 
 interface DateRangePickerProps {
     startDate?: string;

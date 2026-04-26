@@ -2,8 +2,8 @@
 
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { InventoryItem } from "@/types";
-import { formatDateForDisplay } from "@/utils/dateUtils";
-import { getDaysRemaining, getDaysBadge } from "@/utils/expiry";
+import { formatDateForDisplay } from "@/lib/dateUtils";
+import { getDaysRemaining, getDaysBadge } from "@/lib/expiry";
 
 type InventoryItemWithParsedDates = InventoryItem & { _expiryTime: number; _createdTime: number };
 
