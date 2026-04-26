@@ -154,9 +154,11 @@ export default async function LoginPage({
                                     name="password"
                                     type="password"
                                     required
+                                    minLength={6}
                                     className="w-full p-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5B7A34]/30"
                                     placeholder="••••••••"
                                 />
+                                <p className="mt-1 text-xs text-gray-300">6文字以上で入力してください</p>
                             </div>
 
                             <button
