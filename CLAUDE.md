@@ -24,7 +24,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. コミット（既存のコミット規約に従う）
 2. `git push`（初回は `-u origin <branch>`）
-3. **初回 push 時のみ**、`gh pr create` で PR を自動作成（base: `develop`）
+3. **初回 push 時のみ**、`gh pr create --base develop` で PR を自動作成（必ず `develop` をベースにすること）
+4. **PR の merge・ブランチ削除はユーザーが行う。Claude は PR 作成までで止めること。**
 
 ## プロジェクト概要
 
