@@ -3,7 +3,7 @@
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { DrumRollDatePicker } from "@/components/DrumRollDatePicker";
 import { ProductSearchResult } from "@/types";
-import { formatDateForDisplay, parseLocalDate, getLocalDateString } from "@/utils/dateUtils";
+import { formatDateForDisplay, parseLocalDate, getLocalDateString } from "@/lib/dateUtils";
 
 type Props = {
   inputCode: string;

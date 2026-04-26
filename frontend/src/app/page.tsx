@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
-import { AddTab } from "@/components/tabs/AddTab";
-import { InventoryTab } from "@/components/tabs/InventoryTab";
-import { HistoryTab } from "@/components/tabs/HistoryTab";
+import { AddTab } from "@/features/inventory/components/AddTab";
+import { InventoryTab } from "@/features/inventory/components/InventoryTab";
+import { HistoryTab } from "@/features/inventory/components/HistoryTab";
 import { BottomNav } from "@/components/BottomNav";
-import { useInventoryData } from "@/hooks/useInventoryData";
-import { useProductSearch } from "@/hooks/useProductSearch";
+import { useInventoryData } from "@/features/inventory/hooks/useInventoryData";
+import { useProductSearch } from "@/features/inventory/hooks/useProductSearch";
 import { InventoryItem } from "@/types";
-import { parseLocalDate } from "@/utils/dateUtils";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 type Tab = 'add' | 'inventory' | 'history';
 

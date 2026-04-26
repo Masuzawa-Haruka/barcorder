@@ -1,7 +1,7 @@
 "use client";
 
 import { InventoryItem } from "@/types";
-import { formatDateForDisplay } from "@/utils/dateUtils";
+import { formatDateForDisplay } from "@/lib/dateUtils";
 
 type Props = {
   historyItems: InventoryItem[];

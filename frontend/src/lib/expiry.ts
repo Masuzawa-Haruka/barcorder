@@ -1,4 +1,4 @@
-import { parseLocalDate } from './dateUtils';
+import { parseLocalDate } from '@/lib/dateUtils';
 
 export const getDaysRemaining = (expiryDate: string): number => {
   if (!expiryDate) return NaN;
