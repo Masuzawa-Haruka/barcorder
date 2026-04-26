@@ -52,3 +52,6 @@
 
 ### 今後の予定
 - レシート画像からのOCR機能による一括登録
+
+### リリース前にやること
+- Supabase ダッシュボード → Authentication → Providers → Email → 「Confirm email」を ON にする（現在は開発用に OFF）
