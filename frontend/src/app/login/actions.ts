@@ -44,10 +44,6 @@ export async function signup(formData: FormData) {
         redirect(`/login?error=${encodeURIComponent('ユーザーの作成に失敗しました')}`);
     }
 
-    if (signUpData?.session) {
-        revalidatePath('/', 'layout');
-        redirect('/');
-    }
-
-    redirect(`/login?info=${encodeURIComponent('確認メールを送信しました。メール内のリンクを開いた後に再度ログインしてください。')}`);
+    revalidatePath('/', 'layout');
+    redirect('/signup-complete');
 }
