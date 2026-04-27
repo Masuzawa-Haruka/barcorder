@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { ProductSearchResult } from "@/types";
 
@@ -10,9 +10,11 @@ export const useProductSearch = (API_URL: string) => {
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const searchingRef = useRef(false);
 
   const searchProduct = useCallback(async (query: string, setInputCode?: (v: string) => void) => {
-    if (!query) return;
+    if (!query || searchingRef.current) return;
+    searchingRef.current = true;
     setLoading(true);
     setCandidates([]);
     setSelectedProduct(null);
@@ -42,6 +44,7 @@ export const useProductSearch = (API_URL: string) => {
       console.error(e);
       alert("検索エラーが発生しました");
     } finally {
+      searchingRef.current = false;
       setLoading(false);
     }
   }, [API_URL]);

@@ -46,7 +46,7 @@ export const AddTab = ({
               type="text"
               value={inputCode}
               onChange={(e) => setInputCode(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onSearch()}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && onSearch()}
               placeholder="バーコード / 商品名"
               className="flex-1 p-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5B7A34]/30"
             />
